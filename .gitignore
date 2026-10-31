@@ -1,6 +1,7 @@
 # Build output
 hori
 *.exe
+*.zip
 *.o
 
 # Per-machine settings and logs written by the test window
