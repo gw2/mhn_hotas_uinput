@@ -1,0 +1,5 @@
+// Modern-looking buttons, combo boxes and spinners (common controls v6)
+1 24 "hori.manifest"
+
+// Line drawing of the controller, shown in the test window (3/4 of 1536x1024)
+101 BITMAP "hori-diagram.bmp"

@@ -1,0 +1,11 @@
+# Build output
+hori
+*.exe
+*.o
+
+# Per-machine settings and logs written by the test window
+hori.ini
+logs/
+
+# Ready-to-run Windows bundle (published as release downloads instead)
+windows/
