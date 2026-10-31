@@ -654,11 +654,13 @@ static const struct { const char *title; const char *text; } wiz_steps[WS_COUNT]
 	  "Push the stick all the way in any direction, then let go so it springs back by itself.\n\n"
 	  "Do this 5 times, in different directions." },
 	{ "Hat",
-	  "Move the hat all the way in every direction. Then push it to the side and let it spring back, 3 times." },
+	  "First move the hat all the way in every direction.\n\n"
+	  "Then flick it to the side and let go so it springs back by itself, 3 times." },
 	{ "Rudder control",
-	  "Move the rudder control all the way left and right, then let it spring back to centre. Do this 3 times." },
+	  "First move the rudder control all the way left and right.\n\n"
+	  "Then push it to one side and let go so it springs back to centre, 3 times." },
 	{ "Throttle control",
-	  "Slide the throttle all the way forward and all the way back, twice." },
+	  "Slide the throttle from one end to the other 3 times (forward, back, forward)." },
 	{ "Pressure 1", "" },     /* text built from the button that owns the channel */
 	{ "Pressure 2", "" },
 	{ "Buttons",
@@ -716,12 +718,14 @@ static struct {
 
 	/* spring-back detection */
 	int away;
+	int settle_pending;     /* came back; note where it settles once it stops */
+	int range_done;         /* hat/rudder: full range seen, now counting spring-backs */
 	DWORD stable_since;
 	int last[AX_COUNT];
 	int returns;
 
-	/* throttle */
-	int thr_zone, thr_changes;
+	/* throttle: a move is counted once it has travelled far enough from where it turned round */
+	int thr_turn, thr_ext, thr_dir, thr_counted, thr_changes;
 
 	/* pressure */
 	int pressed, presses;
@@ -928,9 +932,14 @@ static void wiz_begin_step(int step)
 			wiz.last[axes[i]] = v[axes[i]];
 		}
 		wiz.away = 0;
+		wiz.settle_pending = 0;
+		wiz.range_done = 0;
 		wiz.returns = 0;
 		wiz.stable_since = wiz.step_start;
-		wiz.thr_zone = 0;
+		wiz.thr_turn = v[AX_THR];
+		wiz.thr_ext = v[AX_THR];
+		wiz.thr_dir = 0;
+		wiz.thr_counted = 0;
 		wiz.thr_changes = 0;
 		wiz.pressed = 0;
 		wiz.presses = 0;
@@ -956,7 +965,8 @@ static void wiz_next_prompt(void)
 		wiz_prompt_begin();
 }
 
-/* Count "pushed away, then came back to rest near the centre" and note where it settled. */
+/* Count "pushed away, then came back near the centre" as soon as it's back, and
+ * note where it settles once it stops moving. */
 static void wiz_track_returns(const int *axes, int n, int away, const int *v, DWORD now)
 {
 	int pushed = 0, centred = 1, moving = 0;
@@ -965,22 +975,27 @@ static void wiz_track_returns(const int *axes, int n, int away, const int *v, DW
 		int d = abs(v[a] - wiz_center(a));
 		if( d > away ) pushed = 1;
 		if( d > 40 ) centred = 0;
-		if( abs(v[a] - wiz.last[a]) > 1 ) moving = 1;
+		if( abs(v[a] - wiz.last[a]) > 3 ) moving = 1;    // more than the at-rest jitter
 		wiz.last[a] = v[a];
 	}
 	if( moving )
 		wiz.stable_since = now;
 
-	if( pushed )
+	if( pushed ) {
 		wiz.away = 1;
-	else if( wiz.away && centred && now - wiz.stable_since >= 400 ) {
+		wiz.settle_pending = 0;
+	} else if( wiz.away && centred ) {
+		wiz.returns++;
+		wiz.away = 0;
+		wiz.settle_pending = 1;
+	}
+	if( wiz.settle_pending && centred && !moving && now - wiz.stable_since >= 300 ) {
 		for( int i=0; i < n; i++ ) {
 			struct wiz_axis *w = &wiz.ax[axes[i]];
 			if( w->nsettle < WIZ_SETTLES )
 				w->settle[w->nsettle++] = v[axes[i]];
 		}
-		wiz.returns++;
-		wiz.away = 0;
+		wiz.settle_pending = 0;
 	}
 }
 
@@ -1145,27 +1160,46 @@ static void wiz_sample(struct hori_instance *inst)
 
 	case WS_STICK_RET:
 		wiz_track_returns(axes, n, 60, v, now);
-		if( wiz.returns >= 5 )
+		if( wiz.returns >= 5 && !wiz.settle_pending )
 			wiz_step_done();
 		break;
 
 	case WS_HAT:
 	case WS_RUDDER:
+		// Range first; the moves for it don't count as spring-backs.
+		if( !wiz.range_done ) {
+			if( wiz_covered(axes[0], 70) && (n < 2 || wiz_covered(axes[1], 70)) ) {
+				wiz.range_done = 1;
+				wiz.away = 0;
+				wiz.returns = 0;
+				for( i=0; i < n; i++ )
+					wiz.ax[axes[i]].nsettle = 0;
+			}
+			break;
+		}
 		wiz_track_returns(axes, n, 50, v, now);
-		if( wiz.returns >= 3 && wiz_covered(axes[0], 70) && (n < 2 || wiz_covered(axes[1], 70)) )
+		if( wiz.returns >= 3 && !wiz.settle_pending )
 			wiz_step_done();
 		break;
 
 	case WS_THROTTLE: {
-		struct wiz_axis *w = &wiz.ax[AX_THR];
-		int range = w->sw_max - w->sw_min;
-		if( range >= 120 ) {
-			int zone = v[AX_THR] < w->sw_min + range / 5 ? 1 : (v[AX_THR] > w->sw_max - range / 5 ? 2 : 0);
-			if( zone && zone != wiz.thr_zone ) {
-				if( wiz.thr_zone )
-					wiz.thr_changes++;
-				wiz.thr_zone = zone;
+		int t = v[AX_THR];
+		if( !wiz.thr_dir ) {
+			if( abs(t - wiz.thr_turn) > 25 ) {
+				wiz.thr_dir = t > wiz.thr_turn ? 1 : -1;
+				wiz.thr_ext = t;
 			}
+		} else if( (t - wiz.thr_ext) * wiz.thr_dir > 0 )
+			wiz.thr_ext = t;                // still going the same way
+		else if( (wiz.thr_ext - t) * wiz.thr_dir > 25 ) {
+			wiz.thr_turn = wiz.thr_ext;     // turned round
+			wiz.thr_dir = -wiz.thr_dir;
+			wiz.thr_ext = t;
+			wiz.thr_counted = 0;
+		}
+		if( wiz.thr_dir && !wiz.thr_counted && abs(t - wiz.thr_turn) >= 140 ) {
+			wiz.thr_counted = 1;
+			wiz.thr_changes++;
 		}
 		if( wiz.thr_changes >= 3 )
 			wiz_step_done();
@@ -1181,7 +1215,7 @@ static void wiz_sample(struct hori_instance *inst)
 			w->press_max = p;
 		if( !wiz.pressed && p > idle + 60 )
 			wiz.pressed = 1;
-		else if( wiz.pressed && p <= idle + 10 ) {
+		else if( wiz.pressed && p <= idle + 25 ) {
 			wiz.pressed = 0;
 			wiz.presses++;
 		}
@@ -1689,12 +1723,12 @@ static void wiz_paint(HDC dc)
 		snprintf(buf, sizeof(buf), "Spring-backs seen: %d of 5", wiz.returns);
 		break;
 	case WS_HAT:
-	case WS_RUDDER: {
-		int axes[2], n = wiz_step_axes(step, axes);
-		int cov = wiz_covered(axes[0], 70) && (n < 2 || wiz_covered(axes[1], 70));
-		snprintf(buf, sizeof(buf), "Full range: %s   Spring-backs: %d of 3", cov ? "done" : "keep going", wiz.returns);
+	case WS_RUDDER:
+		if( !wiz.range_done )
+			snprintf(buf, sizeof(buf), "1. Full range: keep going   2. Spring-backs: next");
+		else
+			snprintf(buf, sizeof(buf), "1. Full range: done   2. Spring-backs: %d of 3", wiz.returns);
 		break;
-	}
 	case WS_THROTTLE:
 		snprintf(buf, sizeof(buf), "End-to-end moves: %d of 3", wiz.thr_changes);
 		break;
