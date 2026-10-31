@@ -22,7 +22,7 @@ Used https://www.tamanegi.org/prog/hfsd/ as reference, and copied the data struc
   * `shift`: every button sends a different code in M2 and M3, which gives you 3 banks of 20 buttons. M1 uses the original codes. Anything held down while you flip the switch is released first, so nothing gets stuck.
 * A and B are analog. Their pressure is reported on ABS_VOLUME (A) and ABS_PROFILE (B), 0 = released and 255 = full. They still act as digital buttons BTN_A/BTN_B too. Change the press threshold with `-t`. There's some hysteresis, so the buttons don't flicker at the threshold.
 * Rumble works through standard force feedback (FF_RUMBLE). It sends vendor request 0x0c, as in hfsd. The stick has only one motor, so it uses whichever of the two rumble strengths is stronger. Test it with `fftest /dev/input/eventN`. Turn it off with `-R`.
-* Dials: the original Windows driver (hfsd) never read the dials either, and there's no known USB report for them. On some units they may sit on an extra mouse/keyboard USB interface. `-k` claims any such interface and turns boot-mouse X/Y motion into two absolute axes (ABS_THROTTLE, ABS_WHEEL). It's experimental. If your unit has no extra interface it says so and does nothing. Run with `-d -k` and turn the dials to see what, if anything, comes in.
+* Dials: they're mechanical adjusters and send nothing over USB. Tested on real hardware: turning them changes no axis, no button bit and no vendor request, not even with the stick, throttle or rudder held off-centre. The stick has a single USB interface, so there's no hidden mouse/keyboard device either. They can't be mapped.
 * D-PAD1 is split into 4 buttons, D-PAD3 is split into 3 buttons. D-PAD2 is split into 4 buttons.
 * HAT +PUSH reads the same bit hfsd uses. If it does nothing for you, run with `-d` and press it. If the `vr00` bytes don't change, the switch itself isn't reporting.
 * Ctrl+C / SIGTERM now remove the virtual device and stop rumble cleanly.
@@ -33,7 +33,6 @@ Used https://www.tamanegi.org/prog/hfsd/ as reference, and copied the data struc
   -m MODE   off | buttons | axis | shift   (M1/M2/M3 handling, default buttons)
   -t N      A/B press threshold on the 0-255 pressure scale (default 20)
   -R        Disable rumble
-  -k        Experimental: read the dials from any extra mouse/keyboard interface
   -d        Debug: print USB descriptors and raw reports as they change
   -P        Debug: probe vendor IN requests 0x00-0x1f once at connect (read-only)
 ```

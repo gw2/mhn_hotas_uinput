@@ -47,7 +47,7 @@ enum {
 
 /* Things on the drawing that aren't buttons; buttons use their HB_ index. */
 enum {
-	CTL_MODE = HB_COUNT, CTL_STICK, CTL_HAT, CTL_RUDDER, CTL_THROTTLE, CTL_DIAL1, CTL_DIAL2,
+	CTL_MODE = HB_COUNT, CTL_STICK, CTL_HAT, CTL_RUDDER, CTL_THROTTLE,
 };
 
 HFONT gui_font, gui_bold, gui_small;
@@ -233,9 +233,6 @@ static const struct art_geo art_geo[] = {
 	{ CTL_HAT,          G_CIRCLE, 1050, 178, 54, 0 },
 	{ CTL_RUDDER,       G_RECT,    485, 158, 165, 42 },
 	{ CTL_THROTTLE,     G_RECT,    480, 252, 268, 82 },
-	{ CTL_DIAL1,        G_CIRCLE,  605, 962, 40, 0 },
-	{ CTL_DIAL1,        G_CIRCLE,  397, 60, 37, 0 },
-	{ CTL_DIAL2,        G_RECT,   1072, 687, 68, 48 },
 	{ CTL_STICK,        G_RECT,   1300, 700, 150, 150 },
 };
 #define ART_GEO_N (int)(sizeof(art_geo) / sizeof(art_geo[0]))
@@ -252,10 +249,10 @@ static int ctl_art_view(int id)
 	case HB_DPAD1_TOP: case HB_DPAD1_RIGHT: case HB_DPAD1_BOTTOM: case HB_DPAD1_LEFT:
 	case HB_HAT: case HB_A: case HB_B: case HB_LAUNCH: case CTL_HAT:
 		return V_STICK_TOP;
-	case HB_FIRE_C: case HB_TRIGGER: case HB_SW1: case CTL_DIAL2: case CTL_STICK:
+	case HB_FIRE_C: case HB_TRIGGER: case HB_SW1: case CTL_STICK:
 		return V_STICK_SIDE;
 	case HB_DPAD3_TOP: case HB_DPAD3_RIGHT: case HB_DPAD3_LEFT:
-	case CTL_RUDDER: case CTL_THROTTLE: case CTL_DIAL1:
+	case CTL_RUDDER: case CTL_THROTTLE:
 		return V_THR_SIDE;
 	case HB_D: case HB_ST: case HB_DPAD2_TOP: case HB_DPAD2_RIGHT: case HB_DPAD2_BOTTOM: case HB_DPAD2_LEFT:
 	case CTL_MODE:
@@ -505,16 +502,6 @@ static void map_text(const struct hori_btn_map *m, char *out, size_t size)
 		snprintf(out, size, "nothing");
 }
 
-/* Where a bit of the button word comes from, for people. */
-static void bit_text(int bit, char *out, size_t size)
-{
-	if( bit < 16 )
-		snprintf(out, size, "button data 1, bit %d", bit);
-	else if( bit < 32 )
-		snprintf(out, size, "button data 2, bit %d", bit - 16);
-	else
-		snprintf(out, size, "request 0x03, bit %d", bit - 32);
-}
 
 static void gui_log_cal(FILE *f)
 {
@@ -655,9 +642,9 @@ enum { WK_ALL, WK_ANALOG, WK_BUTTONS };
 static const struct { const char *title; const char *text; } wiz_steps[WS_COUNT] = {
 	{ "Setup wizard",
 	  "This checks the controls on your stick and sets it up to match. Pick what to test:\n\n"
-	  "  Test everything: the analog controls, then every button and the two dials (about 3 minutes).\n"
+	  "  Test everything: the analog controls, then every button (about 3 minutes).\n"
 	  "  Analog only: the stick, hat, rudder, throttle and pressure buttons, and their dead zones.\n"
-	  "  Buttons only: asks for each button and dial in turn and checks which signal it really sends.\n\n"
+	  "  Buttons only: asks for each button in turn and checks which signal it really sends.\n\n"
 	  "Each step finishes by itself once it has seen what it needs. If a control doesn't work, skip it." },
 	{ "Hands off",
 	  "Let go of the stick, hat and rudder, and don't touch anything (leave the throttle where it is).\n\n"
@@ -675,7 +662,7 @@ static const struct { const char *title; const char *text; } wiz_steps[WS_COUNT]
 	  "Slide the throttle all the way forward and all the way back, twice." },
 	{ "Pressure 1", "" },     /* text built from the button that owns the channel */
 	{ "Pressure 2", "" },
-	{ "Buttons and dials",
+	{ "Buttons",
 	  "Press and release each control the wizard asks for (it's highlighted on the drawing). "
 	  "It records which signal each one really sends, so anything the original driver mixed up gets fixed." },
 	{ "Results",
@@ -683,21 +670,17 @@ static const struct { const char *title; const char *text; } wiz_steps[WS_COUNT]
 };
 
 /* Prompts, in the order the controls sit on the stick and throttle.
- * Values >= PROMPT_MODE are mode switch positions, >= PROMPT_DIAL the dials. */
+ * Values >= PROMPT_MODE are mode switch positions. (The two dials aren't
+ * here: they're mechanical and send nothing over USB.) */
 #define PROMPT_MODE 100
-#define PROMPT_DIAL 200
 static const int wiz_prompts[] = {
 	HB_TRIGGER, HB_FIRE_C, HB_SW1, HB_LAUNCH, HB_A, HB_B, HB_HAT,
 	HB_DPAD1_TOP, HB_DPAD1_BOTTOM, HB_DPAD1_LEFT, HB_DPAD1_RIGHT,
 	HB_D, HB_ST, HB_DPAD2_TOP, HB_DPAD2_BOTTOM, HB_DPAD2_LEFT, HB_DPAD2_RIGHT,
 	HB_DPAD3_TOP, HB_DPAD3_LEFT, HB_DPAD3_RIGHT,
 	PROMPT_MODE + 1, PROMPT_MODE + 2, PROMPT_MODE + 0,
-	PROMPT_DIAL + 0, PROMPT_DIAL + 1,
 };
 #define NPROMPTS (int)(sizeof(wiz_prompts) / sizeof(wiz_prompts[0]))
-
-static const char *const wiz_dial_name[2] = { "Dial 1 (round knob on the throttle)", "Dial 2 (roller at the bottom of the stick grip)" };
-static const char *const wiz_dial_short[2] = { "Dial 1", "Dial 2" };
 
 enum { PR_PENDING, PR_OK, PR_SKIPPED };
 
@@ -749,7 +732,6 @@ static struct {
 	int pr_state[NPROMPTS];
 	int pr_bit[NPROMPTS], pr_chan[NPROMPTS], pr_pmax[NPROMPTS];
 	uint64_t base_word;
-	int base_axes[AX_COUNT];
 	int phase;              /* 0 = waiting for a press, 1 = pressed, waiting for release */
 	uint64_t det_bits;
 	int first_bit, det_chan, det_pmax;
@@ -757,10 +739,6 @@ static struct {
 	DWORD mode_since;
 	char pr_msg[200];
 
-	/* dials: everything that changed while each was turned */
-	uint64_t dial_bits[2];
-	int dial_dev[2][AX_COUNT];
-	DWORD dial_change;
 
 	/* results */
 	struct hori_cal rec[AX_COUNT];
@@ -844,8 +822,6 @@ static int wiz_highlight(void)
 		if( wiz.prompt >= NPROMPTS )
 			return -1;
 		int p = wiz_prompts[wiz.prompt];
-		if( p >= PROMPT_DIAL )
-			return CTL_DIAL1 + p - PROMPT_DIAL;
 		if( p >= PROMPT_MODE )
 			return CTL_MODE;
 		return p;
@@ -857,9 +833,7 @@ static int wiz_highlight(void)
 static void wiz_prompt_name(int j, char *out, size_t size)
 {
 	int p = wiz_prompts[j];
-	if( p >= PROMPT_DIAL )
-		snprintf(out, size, "%s", wiz_dial_short[p - PROMPT_DIAL]);
-	else if( p >= PROMPT_MODE )
+	if( p >= PROMPT_MODE )
 		snprintf(out, size, "Mode switch to M%d", p - PROMPT_MODE + 1);
 	else
 		snprintf(out, size, "%s", hori_btn_name[p]);
@@ -880,28 +854,6 @@ static void raw_wiz_text(int wiz_at, char *out, size_t size)
 		snprintf(out, size, "?");
 }
 
-/* Everything that changed while a dial was turned, for people. */
-static void wiz_dial_text(int k, char *out, size_t size)
-{
-	out[0] = 0;
-	for( int b=0; b < HORI_WORD_BITS; b++ ) {
-		if( !(wiz.dial_bits[k] & (1ull << b)) )
-			continue;
-		char t[48];
-		bit_text(b, t, sizeof(t));
-		for( int i=0; i < HB_COUNT; i++ )
-			if( hori_map[i].bit == b ) {
-				size_t len = strlen(t);
-				snprintf(t + len, sizeof(t) - len, " (= %s)", hori_btn_name[i]);
-				break;
-			}
-		list_add(out, size, "%s", t);
-	}
-	for( int ax=0; ax < AX_COUNT; ax++ )
-		if( wiz.dial_dev[k][ax] > 12 )
-			list_add(out, size, "%s moved by %d", hori_axis_label(ax), wiz.dial_dev[k][ax]);
-}
-
 static void wiz_compute(void);
 static void wiz_compute_buttons(void);
 static void wiz_report(void);
@@ -910,7 +862,6 @@ static void wiz_report(void);
 static void wiz_prompt_begin(void)
 {
 	wiz.base_word = hori_button_word(&hori_inst);
-	memcpy(wiz.base_axes, hori_inst.axis_raw, sizeof(wiz.base_axes));
 	wiz.phase = 0;
 	wiz.det_bits = 0;
 	wiz.first_bit = -1;
@@ -919,12 +870,6 @@ static void wiz_prompt_begin(void)
 	wiz.flash_time = 0;
 	wiz.mode_since = 0;
 	wiz.pr_msg[0] = 0;
-	if( wiz.prompt < NPROMPTS && wiz_prompts[wiz.prompt] >= PROMPT_DIAL ) {
-		int k = wiz_prompts[wiz.prompt] - PROMPT_DIAL;
-		wiz.dial_bits[k] = 0;
-		memset(wiz.dial_dev[k], 0, sizeof(wiz.dial_dev[k]));
-		wiz.dial_change = 0;
-	}
 }
 
 /* Start a step. Called with hori_lock held. */
@@ -1040,31 +985,6 @@ static void wiz_track_returns(const int *axes, int n, int away, const int *v, DW
 	}
 }
 
-/* A dial: note every bit and axis that changes while it's turned; accept once it's
- * changed something and then been left alone for 2 seconds. Called with hori_lock held. */
-static void wiz_sample_dial(struct hori_instance *inst, int k, DWORD now)
-{
-	uint64_t changed = (hori_button_word(inst) ^ wiz.base_word) & ~HORI_MODE_BITS;
-	if( changed & ~wiz.dial_bits[k] ) {
-		wiz.dial_bits[k] |= changed;
-		wiz.dial_change = now;
-	}
-	if( inst->have_ir )
-		for( int ax=0; ax < AX_COUNT; ax++ ) {
-			int d = abs(inst->axis_raw[ax] - wiz.base_axes[ax]);
-			if( d > wiz.dial_dev[k][ax] + 2 ) {
-				wiz.dial_dev[k][ax] = d;
-				if( d > 12 )
-					wiz.dial_change = now;
-			}
-		}
-
-	if( wiz.dial_change && now - wiz.dial_change >= 2000 ) {
-		wiz.pr_state[wiz.prompt] = PR_OK;
-		wiz.flash_time = now;
-	}
-}
-
 /* Watch for the prompted button: which bit changes and/or which pressure channel rises,
  * then wait for it to be released before accepting. Called with hori_lock held. */
 static void wiz_sample_prompt(struct hori_instance *inst, DWORD now)
@@ -1075,11 +995,6 @@ static void wiz_sample_prompt(struct hori_instance *inst, DWORD now)
 	if( wiz.flash_time ) {
 		if( now - wiz.flash_time >= 500 )
 			wiz_next_prompt();
-		return;
-	}
-
-	if( p >= PROMPT_DIAL ) {
-		wiz_sample_dial(inst, p - PROMPT_DIAL, now);
 		return;
 	}
 
@@ -1379,22 +1294,12 @@ static void wiz_compute_buttons(void)
 {
 	struct hori_btn_map *m = wiz.rec_map;
 	int tested[HB_COUNT] = { 0 };
-	char changed[400] = "", missing[400] = "", pressure[200] = "", dials[500] = "";
+	char changed[400] = "", missing[400] = "", pressure[200] = "";
 	int ok = 0, total = 0, modes = 0;
 
 	memcpy(m, hori_map, sizeof(wiz.rec_map));
 	for( int j=0; j < NPROMPTS; j++ ) {
 		int b = wiz_prompts[j];
-		if( b >= PROMPT_DIAL ) {
-			int k = b - PROMPT_DIAL;
-			char t[300];
-			if( PR_OK == wiz.pr_state[j] ) {
-				wiz_dial_text(k, t, sizeof(t));
-				list_add(dials, sizeof(dials), "%s changes: %s", wiz_dial_short[k], t);
-			} else
-				list_add(dials, sizeof(dials), "%s: no signal seen (or skipped)", wiz_dial_short[k]);
-			continue;
-		}
 		if( b >= PROMPT_MODE ) {
 			modes += PR_OK == wiz.pr_state[j];
 			if( PR_OK != wiz.pr_state[j] )
@@ -1443,13 +1348,11 @@ static void wiz_compute_buttons(void)
 			"Buttons: %d of %d responded, mode switch %d of 3.\n"
 			"Pressure-sensitive: %s.\n"
 			"%s%s%s"
-			"%s%s%s"
-			"Dials: %s.",
+			"%s%s",
 			ok, total, modes,
 			pressure[0] ? pressure : "none",
 			changes_intro, changed, changes_intro[0] ? "\n" : "",
-			missing[0] ? "Not seen (skipped or not working): " : "", missing, missing[0] ? "\n" : "",
-			dials);
+			missing[0] ? "Not seen (skipped or not working): " : "", missing);
 }
 
 static void wiz_cal_text(const struct hori_cal *c, char *out, size_t size)
@@ -1497,8 +1400,6 @@ static void wiz_report(void)
 			wiz_prompt_name(j, name, sizeof(name));
 			if( PR_OK != wiz.pr_state[j] )
 				snprintf(m, sizeof(m), "skipped");
-			else if( p >= PROMPT_DIAL )
-				wiz_dial_text(p - PROMPT_DIAL, m, sizeof(m));
 			else if( p >= PROMPT_MODE )
 				snprintf(m, sizeof(m), "OK");
 			else {
@@ -1532,17 +1433,13 @@ static void wiz_report(void)
 	}
 	gbuf_printf(&wiz_detail, "  Hands-off restarts (movement detected): %d\n", wiz.rest_restarts);
 	gbuf_printf(&wiz_detail, "  Pressure resting levels: %d, %d\n", wiz.press_floor[0], wiz.press_floor[1]);
-	if( wiz.ran[WS_BUTTONS] ) {
+	if( wiz.ran[WS_BUTTONS] )
 		for( int j=0; j < NPROMPTS; j++ )
 			if( wiz.pr_chan[j] >= 0 ) {
 				char name[64];
 				wiz_prompt_name(j, name, sizeof(name));
 				gbuf_printf(&wiz_detail, "  %s: pressure channel %d peaked at %d\n", name, wiz.pr_chan[j] + 1, wiz.pr_pmax[j]);
 			}
-		for( int k=0; k < 2; k++ )
-			gbuf_printf(&wiz_detail, "  %s: changed bits mask %010llx\n", wiz_dial_short[k],
-					(unsigned long long)wiz.dial_bits[k]);
-	}
 }
 
 static void wiz_place(int id, int x, int w, const char *text, int show)
@@ -1559,7 +1456,6 @@ static void wiz_update_controls(void)
 	int step = wiz.step;
 	int intro = WS_INTRO == step, results = WS_RESULTS == step, buttons = WS_BUTTONS == step;
 	int analog = !intro && !results && !buttons;
-	int dial = buttons && wiz.prompt < NPROMPTS && wiz_prompts[wiz.prompt] >= PROMPT_DIAL;
 
 	wiz_place(IDC_WIZ_ALL, 20, 170, NULL, intro);
 	wiz_place(IDC_WIZ_ANALOG, 200, 150, NULL, intro);
@@ -1567,7 +1463,7 @@ static void wiz_update_controls(void)
 
 	wiz_place(IDC_WIZ_BACK, 20, 80, NULL, buttons);
 	EnableWindow(GetDlgItem(wiz_hwnd, IDC_WIZ_BACK), buttons && wiz.prompt > 0);
-	wiz_place(IDC_WIZ_SKIPBTN, 110, 170, dial ? "Nothing changes / skip" : "Skip this button", buttons);
+	wiz_place(IDC_WIZ_SKIPBTN, 110, 170, NULL, buttons);
 	wiz_place(IDC_WIZ_SKIP, buttons ? 290 : 20, 150, buttons ? "Skip the rest" : "Skip this step", buttons || analog);
 
 	wiz_place(IDC_WIZ_NEXT, WIZ_W - 190, 170, "Apply && save", results);
@@ -1842,24 +1738,11 @@ static void wiz_paint(HDC dc)
 		if( wiz.prompt < NPROMPTS ) {
 			int p = wiz_prompts[wiz.prompt];
 			wiz_prompt_name(wiz.prompt, name, sizeof(name));
-			gui_text(dc, 20, y - 6, GUI_TEXT, p >= PROMPT_DIAL ? "Turn it all the way one way, then the other:"
-					: (p >= PROMPT_MODE ? "Move:" : "Press and release:"));
+			gui_text(dc, 20, y - 6, GUI_TEXT, p >= PROMPT_MODE ? "Move:" : "Press and release:");
 			SelectObject(dc, gui_big);
 			gui_text(dc, 20, y + 14, wiz.flash_time ? GUI_OK : GUI_HL, "%s", name);
 			SelectObject(dc, gui_font);
-			if( p >= PROMPT_DIAL ) {
-				int k = p - PROMPT_DIAL;
-				char seen[400];
-				wiz_dial_text(k, seen, sizeof(seen));
-				gui_wrap(dc, 20, y + 50, WIZ_ART_X - 40, 20, GUI_DIM, wiz_dial_name[k]);
-				if( seen[0] ) {
-					char line[460];
-					snprintf(line, sizeof(line), "Changes seen: %s. Leave it for 2 seconds to finish.", seen);
-					gui_wrap(dc, 20, y + 70, WIZ_ART_X - 40, 54, GUI_OK, line);
-				} else
-					gui_wrap(dc, 20, y + 70, WIZ_ART_X - 40, 54, GUI_TEXT,
-							"Nothing changing yet. If turning it changes nothing, it isn't reported over USB: click the skip button.");
-			} else if( wiz.pr_msg[0] )
+			if( wiz.pr_msg[0] )
 				gui_wrap(dc, 20, y + 52, WIZ_ART_X - 40, 44, GUI_BAD, wiz.pr_msg);
 			else if( wiz.flash_time )
 				gui_text(dc, 20, y + 52, GUI_OK, "Got it.");
@@ -1906,7 +1789,7 @@ static void wiz_paint(HDC dc)
 			y += 30;
 		}
 		if( wiz.ran[WS_BUTTONS] ) {
-			gui_heading(dc, 20, y, "Buttons and dials");
+			gui_heading(dc, 20, y, "Buttons");
 			y += 26;
 			gui_wrap(dc, 20, y, WIZ_W - 40, WIZ_H - 70 - y, GUI_TEXT, wiz.btn_found);
 		}
@@ -1941,7 +1824,7 @@ static LRESULT CALLBACK wiz_wndproc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
 		if( advance )
 			wiz_advance();
 		else if( WS_BUTTONS == wiz.step && prompt != last_prompt )
-			wiz_update_controls();     // Back enabled, skip button's wording for dials
+			wiz_update_controls();     // Back enabled once past the first prompt
 		last_prompt = WS_BUTTONS == wiz.step ? prompt : -1;
 		InvalidateRect(w, NULL, FALSE);
 		return 0;

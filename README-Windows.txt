@@ -80,15 +80,14 @@ Setup wizard
   threshold for the pressure buttons), with the reason for each.
 
   Buttons: asks for each control in turn (Trigger, Button C, SW-1, Launch,
-  A, B, the hat push, each D-pad direction, D, ST, M1/M2/M3, and the two
-  dials), and records which signal it really sends, including whether it's
+  A, B, the hat push, each D-pad direction, D, ST and M1/M2/M3), and
+  records which signal it really sends, including whether it's
   pressure-sensitive.
   D-PAD 3 has three positions: up, right and left (the original driver
   called up "middle"). There is no down.
-  Dials: the wizard watches everything the stick sends while you turn each
-  dial, and reports what changed. On the stick this was developed with,
-  turning the dials changed nothing at all (no axis, no button bit, nothing
-  in request 0x03), so they aren't reported over USB and can't be mapped.
+  Dials: they're mechanical adjusters and send nothing over USB (tested:
+  turning them changes no axis, button or data byte, even with the stick,
+  throttle or rudder held off-centre), so they can't be mapped.
   If a button doesn't send what the original driver expected, the results
   say so and Apply fixes it. If two buttons send the same signal, it tells
   you straight away.
@@ -152,7 +151,7 @@ Options:
 Not supported on Windows (yet)
 ------------------------------
   - Rumble (the Linux version has it).
-  - The dials: they don't send anything over USB (tested with the wizard).
+  - The dials: they're mechanical and don't send anything over USB.
 
 
 Troubleshooting

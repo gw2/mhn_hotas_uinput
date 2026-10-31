@@ -37,11 +37,8 @@
 #define HORI_PRESSURE_A ABS_VOLUME
 #define HORI_PRESSURE_B ABS_PROFILE
 #define HORI_MODE_ABS   ABS_MISC
-#define HORI_DIAL_1     ABS_THROTTLE
-#define HORI_DIAL_2     ABS_WHEEL
 
 #define HORI_FF_MAX     16
-#define HORI_MAX_DIALS  4
 
 struct hori_input_ir {
 	uint8_t	pos_x;
@@ -142,13 +139,6 @@ static const int hori_btn_codes[3][HB_COUNT] = {
 /* With "-m buttons", M1/M2/M3 are these (layers 1/2 are unused in that mode). */
 static const int hori_mode_btn_codes[3] = { BTN_TRIGGER_HAPPY9, BTN_TRIGGER_HAPPY10, BTN_TRIGGER_HAPPY11 };
 
-struct hori_dial {
-	int	iface;
-	uint8_t	ep;
-	uint16_t	maxpkt;
-	uint8_t	protocol;      /* HID boot protocol: 1 = keyboard, 2 = mouse */
-};
-
 struct hori_instance {
 	struct hori_input_ir	state_ir;
 	struct hori_input_vr_00	state_vr00;
@@ -172,11 +162,6 @@ struct hori_instance {
 	uint32_t	ff_gain;
 	int	rumble_sent;
 
-	/* experimental dial capture */
-	struct hori_dial	dials[HORI_MAX_DIALS];
-	int	dial_count;
-	int	dial_pos[2];
-
 	int uinp_fd;
 
 	struct libusb_device *usbdev;
@@ -191,7 +176,6 @@ static int opt_mode = HORI_MODE_BUTTONS;
 static int opt_threshold = 20;
 static int opt_rumble = 1;
 static int opt_debug = 0;
-static int opt_dials = 0;
 static int opt_probe = 0;
 
 static volatile sig_atomic_t hori_quit = 0;
@@ -264,11 +248,6 @@ int hori_uinput_init(struct hori_instance *inst)
 	if( HORI_MODE_AXIS == opt_mode )
 		hori_uinput_setup_abs(inst, HORI_MODE_ABS, 0, 2);
 
-	if( opt_dials ) {
-		hori_uinput_setup_abs(inst, HORI_DIAL_1, 0, 255);
-		hori_uinput_setup_abs(inst, HORI_DIAL_2, 0, 255);
-	}
-
 	if( opt_rumble ) {
 		ioctl(inst->uinp_fd, UI_SET_EVBIT, EV_FF);
 		ioctl(inst->uinp_fd, UI_SET_FFBIT, FF_RUMBLE);
@@ -302,7 +281,6 @@ int hori_uinput_init(struct hori_instance *inst)
 		inst->abs_last[i] = -1;
 	inst->mode = -1;
 	inst->ff_gain = 0xffff;
-	inst->dial_pos[0] = inst->dial_pos[1] = 128;
 
 	return 0;
 
@@ -417,60 +395,6 @@ static void hori_usb_dump_config(struct hori_instance *inst)
 	libusb_free_config_descriptor(cfg);
 }
 
-/* Experimental: the dials may come in on separate HID mouse/keyboard interfaces.
- * Grab any extra interface that has an interrupt IN endpoint and read it ourselves. */
-static void hori_usb_init_dials(struct hori_instance *inst)
-{
-	struct libusb_config_descriptor *cfg;
-	if( LIBUSB_SUCCESS != libusb_get_active_config_descriptor(inst->usbdev, &cfg) )
-		return;
-
-	for( int i=0; i < cfg->bNumInterfaces && inst->dial_count < HORI_MAX_DIALS; i++ )
-	{
-		if( cfg->interface[i].num_altsetting < 1 )
-			continue;
-
-		const struct libusb_interface_descriptor *id = &cfg->interface[i].altsetting[0];
-		if( 0 == id->bInterfaceNumber )
-			continue;
-
-		for( int e=0; e < id->bNumEndpoints; e++ )
-		{
-			const struct libusb_endpoint_descriptor *ep = &id->endpoint[e];
-			if( (ep->bmAttributes & LIBUSB_TRANSFER_TYPE_MASK) != LIBUSB_TRANSFER_TYPE_INTERRUPT )
-				continue;
-			if( !(ep->bEndpointAddress & LIBUSB_ENDPOINT_IN) )
-				continue;
-
-			int err = libusb_claim_interface(inst->usbdev_handle, id->bInterfaceNumber);
-			if( LIBUSB_SUCCESS != err ) {
-				fprintf(stderr, "hori_usb_init_dials: Cannot claim interface %d: %s\n",
-						id->bInterfaceNumber, libusb_strerror(err));
-				break;
-			}
-
-			// HID boot subclass: ask for the fixed boot report layout.
-			if( LIBUSB_CLASS_HID == id->bInterfaceClass && 1 == id->bInterfaceSubClass )
-				libusb_control_transfer(inst->usbdev_handle,
-						LIBUSB_ENDPOINT_OUT | LIBUSB_REQUEST_TYPE_CLASS | LIBUSB_RECIPIENT_INTERFACE,
-						0x0b /* SET_PROTOCOL */, 0 /* boot */, id->bInterfaceNumber, NULL, 0, 200);
-
-			struct hori_dial *d = &inst->dials[inst->dial_count++];
-			d->iface = id->bInterfaceNumber;
-			d->ep = ep->bEndpointAddress;
-			d->maxpkt = ep->wMaxPacketSize > 64 ? 64 : ep->wMaxPacketSize;
-			d->protocol = id->bInterfaceProtocol;
-			fprintf(stderr, "hori_usb_init_dials: Reading interface %d endpoint %02x (protocol %d)\n",
-					d->iface, d->ep, d->protocol);
-			break;
-		}
-	}
-
-	if( 0 == inst->dial_count )
-		fprintf(stderr, "hori_usb_init_dials: No extra interrupt interfaces found; the dials aren't reported over USB on this unit.\n");
-
-	libusb_free_config_descriptor(cfg);
-}
 
 /* Read-only probe of other vendor IN requests, to look for unknown controls. */
 static void hori_usb_probe(struct hori_instance *inst)
@@ -519,9 +443,6 @@ int hori_usb_init(struct hori_instance *inst)
 	if( opt_debug )
 		hori_usb_dump_config(inst);
 
-	if( opt_dials )
-		hori_usb_init_dials(inst);
-
 	if( opt_probe )
 		hori_usb_probe(inst);
 
@@ -564,11 +485,8 @@ void hori_instance_close(struct hori_instance *inst, int unplugged)
 	if( dev_handle && !unplugged && inst->rumble_sent )
 		hori_rumble_send(inst, 0);
 
-	if( dev_handle ) {
-		for( int i=0; i < inst->dial_count; i++ )
-			libusb_release_interface(dev_handle, inst->dials[i].iface);
+	if( dev_handle )
 		libusb_release_interface(dev_handle, 0);
-	}
 
 	hori_uinput_shutdown(inst);
 	hori_instance_free(inst);
@@ -697,42 +615,6 @@ static int hori_poll_vr(struct hori_instance *inst, uint8_t request, void *out, 
 	return 0;
 }
 
-static int hori_poll_dials(struct hori_instance *inst, int *doreport)
-{
-	unsigned char buf[64];
-	int transferred;
-
-	for( int i=0; i < inst->dial_count; i++ )
-	{
-		struct hori_dial *d = &inst->dials[i];
-		int err = libusb_interrupt_transfer(inst->usbdev_handle, d->ep, buf, d->maxpkt, &transferred, 1);
-		if( LIBUSB_ERROR_TIMEOUT == err || 0 == transferred )
-			continue;
-		if( 0 != err ) {
-			fprintf(stderr, "hori_poll_dials: interface %d: %s\n", d->iface, libusb_strerror(err));
-			return -1;
-		}
-
-		if( opt_debug ) {
-			fprintf(stderr, "hori: iface%d:", d->iface);
-			for( int b=0; b < transferred; b++ )
-				fprintf(stderr, " %02x", buf[b]);
-			fprintf(stderr, "\n");
-		}
-
-		// Boot mouse report: buttons, dx, dy. Turn the relative motion into two absolute dials.
-		if( 2 == d->protocol && transferred >= 3 ) {
-			for( int axis=0; axis < 2; axis++ ) {
-				int v = inst->dial_pos[axis] + (int8_t)buf[1 + axis];
-				inst->dial_pos[axis] = v < 0 ? 0 : (v > 255 ? 255 : v);
-			}
-			if( 0 > hori_set_abs(inst, HORI_DIAL_1, inst->dial_pos[0], doreport) ) return -1;
-			if( 0 > hori_set_abs(inst, HORI_DIAL_2, inst->dial_pos[1], doreport) ) return -1;
-		}
-	}
-
-	return 0;
-}
 
 static void hori_debug_dump(struct hori_instance *inst)
 {
@@ -847,8 +729,6 @@ static int hori_report(struct hori_instance *inst)
 		doreport = 1;
 	}
 
-	if( opt_dials && 0 > hori_poll_dials(inst, &doreport) )
-		return -1;
 
 	if( 1 == doreport )
 		return hori_uinput_emit(inst, EV_SYN, SYN_REPORT, 0);
@@ -1004,7 +884,6 @@ static void hori_usage(const char *argv0)
 		"              shift    every button sends a different code in M1, M2 and M3\n"
 		"  -t N      A/B press threshold, 0-254 on the 0-255 pressure scale (default: 20)\n"
 		"  -R        Disable rumble\n"
-		"  -k        Experimental: read the dials from any extra mouse/keyboard interface\n"
 		"  -d        Debug: print USB descriptors and raw reports as they change\n"
 		"  -P        Debug: probe vendor IN requests 0x00-0x1f once at connect\n"
 		"  -h        This help\n", argv0);
@@ -1016,7 +895,7 @@ int main(int argc, char **argv)
 	int c;
 	libusb_hotplug_callback_handle callback_handle;
 
-	while( -1 != (c = getopt(argc, argv, "m:t:RkdPh")) )
+	while( -1 != (c = getopt(argc, argv, "m:t:RdPh")) )
 	{
 		switch( c ) {
 		case 'm':
@@ -1031,7 +910,6 @@ int main(int argc, char **argv)
 			if( opt_threshold < 0 || opt_threshold > 254 ) { hori_usage(argv[0]); return EXIT_FAILURE; }
 			break;
 		case 'R': opt_rumble = 0; break;
-		case 'k': opt_dials = 1; break;
 		case 'd': opt_debug = 1; break;
 		case 'P': opt_probe = 1; break;
 		case 'h': hori_usage(argv[0]); return EXIT_SUCCESS;
