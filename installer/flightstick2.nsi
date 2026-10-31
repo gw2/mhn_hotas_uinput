@@ -122,7 +122,9 @@ Section "Flightstick 2 driver (required)" SecApp
 SectionEnd
 
 Section "vJoy (the virtual joystick games see)" SecVJoy
+	; Both files: uninstalling vJoy while the DLL is in use leaves just the DLL.
 	${If} ${FileExists} "${VJOY_DIR}\x64\vJoyInterface.dll"
+	${AndIf} ${FileExists} "${VJOY_DIR}\x64\vJoyConfig.exe"
 		DetailPrint "vJoy is already installed."
 	${Else}
 		InitPluginsDir

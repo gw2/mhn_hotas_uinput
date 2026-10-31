@@ -374,10 +374,15 @@ static int hori_vjoy_load(void)
 	char path[MAX_PATH];
 
 	// Only load it from vJoy's own install folder, or next to hori.exe.
+	// Uninstalling vJoy while something has the DLL open leaves just the DLL
+	// behind, so a real install also needs vJoyConfig.exe there.
 	const char *pf = getenv("ProgramFiles");
 	if( pf ) {
-		snprintf(path, sizeof(path), "%s\\vJoy\\x64\\vJoyInterface.dll", pf);
-		dll = LoadLibraryA(path);
+		snprintf(path, sizeof(path), "%s\\vJoy\\x64\\vJoyConfig.exe", pf);
+		if( INVALID_FILE_ATTRIBUTES != GetFileAttributesA(path) ) {
+			snprintf(path, sizeof(path), "%s\\vJoy\\x64\\vJoyInterface.dll", pf);
+			dll = LoadLibraryA(path);
+		}
 	}
 	if( !dll && GetModuleFileNameA(NULL, path, sizeof(path)) ) {
 		char *slash = strrchr(path, '\\');
