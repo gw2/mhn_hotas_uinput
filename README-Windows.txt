@@ -133,20 +133,16 @@ Setup wizard
   threshold for the pressure buttons), with the reason for each.
 
   Buttons: asks for each control in turn (Trigger, Button C, SW-1, Launch,
-  A, B, the hat push, each D-pad direction, D, ST and M1/M2/M3), and
-  records which signal it really sends, including whether it's
-  pressure-sensitive.
+  A, B, the hat push, each D-pad direction, D, ST and M1/M2/M3) and checks
+  it works. Only the button asked for counts: press a different one (or
+  several at once) and it tells you which and keeps waiting.
   D-PAD 3 has three positions: up, right and left (the original driver
   called up "middle"). There is no down.
   Dials: they're mechanical adjusters and send nothing over USB (tested:
   turning them changes no axis, button or data byte, even with the stick,
   throttle or rudder held off-centre), so they can't be mapped.
-  If a button doesn't send what the original driver expected, the results
-  say so and Apply fixes it. If two buttons send the same signal, it tells
-  you straight away.
-  About Launch: the stick only has two pressure channels (the original driver
-  gave them to A and B). If Launch turns out to use one of them, the wizard
-  will show it as pressure-sensitive and use it that way.
+  Only A and B are pressure-sensitive (the stick has two pressure channels;
+  Launch is an on/off button).
 
   "Apply & save" uses the results straight away and saves them to hori.ini
   next to the exe; hori.exe reads the same file. "Reset dead zones" in the

@@ -643,7 +643,7 @@ static const struct { const char *title; const char *text; } wiz_steps[WS_COUNT]
 	  "This checks the controls on your stick and sets it up to match. Pick what to test:\n\n"
 	  "  Test everything: the analog controls, then every button (about 3 minutes).\n"
 	  "  Analog only: the stick, hat, rudder, throttle and pressure buttons, and their dead zones.\n"
-	  "  Buttons only: asks for each button in turn and checks which signal it really sends.\n\n"
+	  "  Buttons only: asks for each button in turn and checks that it works.\n\n"
 	  "Each step finishes by itself once it has seen what it needs. If a control doesn't work, skip it." },
 	{ "Hands off",
 	  "Let go of the stick, hat and rudder, and don't touch anything (leave the throttle where it is).\n\n"
@@ -665,7 +665,7 @@ static const struct { const char *title; const char *text; } wiz_steps[WS_COUNT]
 	{ "Pressure 2", "" },
 	{ "Buttons",
 	  "Press and release each control the wizard asks for (it's highlighted on the drawing). "
-	  "It records which signal each one really sends, so anything the original driver mixed up gets fixed." },
+	  "Only the button asked for counts; if you press a different one, it tells you which and waits." },
 	{ "Results",
 	  "Here's what the wizard found. Apply && save uses it now and saves it to hori.ini, so hori.exe uses it too." },
 };
@@ -742,9 +742,6 @@ static struct {
 	DWORD flash_time;       /* the box stays green briefly before the next prompt */
 	DWORD mode_since;
 	char pr_msg[200];
-	int reject_set;         /* last press didn't look like this button ... */
-	uint64_t reject_bits;   /* ... and this is what it sent */
-	int reject_chan;
 
 
 	/* results */
@@ -877,7 +874,6 @@ static void wiz_prompt_begin(void)
 	wiz.flash_time = 0;
 	wiz.mode_since = 0;
 	wiz.pr_msg[0] = 0;
-	wiz.reject_set = 0;
 }
 
 /* Start the current prompt over after a rejected press, keeping the message up. */
@@ -1033,7 +1029,6 @@ static void wiz_track_returns(const int *axes, int n, int away, const int *v, DW
 static void wiz_sample_prompt(struct hori_instance *inst, DWORD now)
 {
 	int p = wiz_prompts[wiz.prompt];
-	char name[64];
 
 	if( wiz.flash_time ) {
 		if( now - wiz.flash_time >= 500 )
@@ -1086,52 +1081,34 @@ static void wiz_sample_prompt(struct hori_instance *inst, DWORD now)
 	if( 1 != wiz.phase || chans_up )
 		return;
 
-	/* released: work out what it was */
-	int bit = wiz.first_bit;
-	int chan = (wiz.det_chan & 1) ? 0 : ((wiz.det_chan & 2) ? 1 : -1);
-
-	for( int j=0; j < NPROMPTS; j++ ) {
-		if( j == wiz.prompt || PR_OK != wiz.pr_state[j] || wiz_prompts[j] >= PROMPT_MODE )
-			continue;
-		if( (bit >= 0 && wiz.pr_bit[j] == bit) || (chan >= 0 && wiz.pr_chan[j] == chan) ) {
-			wiz_prompt_name(j, name, sizeof(name));
-			snprintf(wiz.pr_msg, sizeof(wiz.pr_msg),
-					"That's the same signal as %s, which you already pressed. Try %s again.",
-					name, hori_btn_name[p]);
-			wiz_prompt_retry(word);
-			return;
-		}
-	}
-
-	/* A press that isn't what this button normally sends is probably the wrong
-	 * button: say so, and only take it if the same thing is pressed again
-	 * (so a button that really is wired differently can still be recorded). */
-	int many = wiz.det_bits & (wiz.det_bits - 1) ? 1 : 0;
-	int other = -1;
-	if( bit >= 0 ? bit != hori_map[p].bit : chan != hori_map[p].chan )
-		for( int k=0; k < HB_COUNT; k++ )
-			if( k != p && (bit >= 0 ? hori_map[k].bit == bit : (chan >= 0 && hori_map[k].chan == chan)) ) {
-				other = k;
-				break;
+	/* Released. Only the prompted button's own signal counts (the stick's
+	 * wiring, which every button has been checked against); anything else is
+	 * a different button, so say which and keep waiting. */
+	const struct hori_btn_map *d = &hori_map_default[p];
+	uint64_t want_bits = d->bit >= 0 ? 1ull << d->bit : 0;
+	int want_chan = d->chan >= 0 ? 1 << d->chan : 0;
+	if( wiz.det_bits != want_bits || wiz.det_chan != want_chan ) {
+		int other = -1, many = 0;
+		for( int k=0; k < HB_COUNT; k++ ) {
+			const struct hori_btn_map *o = &hori_map_default[k];
+			if( (o->bit >= 0 && (wiz.det_bits & (1ull << o->bit))) || (o->chan >= 0 && (wiz.det_chan & (1 << o->chan))) ) {
+				if( k == p || other >= 0 )
+					many = 1;
+				else
+					other = k;
 			}
-	if( many || other >= 0 ) {
-		int again = wiz.reject_set && wiz.reject_bits == wiz.det_bits && wiz.reject_chan == wiz.det_chan;
-		if( !again ) {
-			if( many )
-				snprintf(wiz.pr_msg, sizeof(wiz.pr_msg),
-						"More than one button changed. Press only %s. (If %s really does that, press it the same way again.)",
-						hori_btn_name[p], hori_btn_name[p]);
-			else
-				snprintf(wiz.pr_msg, sizeof(wiz.pr_msg),
-						"That looks like %s, not %s. Press %s. (If that really was %s, press it again.)",
-						hori_btn_name[other], hori_btn_name[p], hori_btn_name[p], hori_btn_name[p]);
-			wiz.reject_set = 1;
-			wiz.reject_bits = wiz.det_bits;
-			wiz.reject_chan = wiz.det_chan;
-			wiz_prompt_retry(word);
-			return;
 		}
+		if( many )
+			snprintf(wiz.pr_msg, sizeof(wiz.pr_msg), "More than one button was pressed. Press only %s.", hori_btn_name[p]);
+		else if( other >= 0 )
+			snprintf(wiz.pr_msg, sizeof(wiz.pr_msg), "That was %s. Press %s.", hori_btn_name[other], hori_btn_name[p]);
+		else
+			snprintf(wiz.pr_msg, sizeof(wiz.pr_msg), "That wasn't %s. Press %s.", hori_btn_name[p], hori_btn_name[p]);
+		wiz_prompt_retry(word);
+		return;
 	}
+
+	int bit = d->bit, chan = d->chan;
 
 	wiz.pr_bit[wiz.prompt] = bit;
 	wiz.pr_chan[wiz.prompt] = chan;
