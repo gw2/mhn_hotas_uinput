@@ -12,7 +12,7 @@ prompt it:
   - installs the app to Program Files, with Start-menu shortcuts and an
     entry in Settings > Apps for uninstalling,
   - installs vJoy 2.2.2.0 (its official installer is included) if needed,
-  - sets vJoy device 1 to 8 axes, 32 buttons and 3 POV hats (this replaces
+  - sets vJoy device 1 to 8 axes, 23 buttons and 3 POV hats (this replaces
     device 1's current setup; untick it on the components page to skip),
   - gives the stick Windows' built-in WinUSB driver with hori-driver.exe,
   - and, if you tick it, starts Flightstick 2 in the tray when you sign in.
@@ -46,7 +46,7 @@ If you use the zip instead of the installer, unzip it anywhere, plug in the
 stick and run hori-test.exe. If anything is missing it opens the Setup
 check, which checks three things and offers to fix each one:
   1. vJoy installed      -> downloads vJoy 2.2.2.0 and runs its installer
-  2. vJoy device set up  -> runs vJoyConfig: 8 axes, 32 buttons, 3 POV hats
+  2. vJoy device set up  -> runs vJoyConfig: 8 axes, 23 buttons, 3 POV hats
                             (this replaces vJoy device 1's current setup)
   3. Stick has WinUSB    -> runs hori-driver.exe install
                             (or, if it's missing, downloads Zadig 2.9 and
@@ -74,7 +74,7 @@ and run the installer. Reboot if it asks.
 Start menu -> "Configure vJoy". For device 1:
   - Axes: tick X, Y, Z, Rx, Ry, Rz, Slider, Dial/Slider2
           (and Wheel if you want "-m axis")
-  - Number of buttons: 32  (or 128 if you want "-m shift")
+  - Number of buttons: 23  (or 87 if you want "-m shift")
   - POV hat switches: Continuous, 3  (D-PAD 1, 2 and 3; with 2, D-PAD 3 is buttons)
   - Click Apply. Make sure "Enable vJoy" at the bottom left is ticked.
 
@@ -198,7 +198,7 @@ The setting is saved, and hori.exe uses it too.
 Options:
   -m buttons   (default) the M1/M2/M3 switch holds button 10, 11 or 12
   -m shift     every button number goes up by 32 in M2 and 64 in M3,
-               giving 3 separate banks of buttons (needs 128 vJoy buttons)
+               giving 3 separate banks of buttons (needs 87 vJoy buttons)
   -m axis      the switch position is the Wheel axis
   -m off       ignore the switch
   -t N         A/B press threshold, 0-254 (default 20); lower = lighter press

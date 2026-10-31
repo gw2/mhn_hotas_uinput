@@ -139,8 +139,8 @@ SectionEnd
 
 Section "Set up vJoy device 1 for the stick" SecVJoyCfg
 	${If} ${FileExists} "${VJOY_DIR}\x64\vJoyConfig.exe"
-		DetailPrint "Setting vJoy device 1 to 8 axes, 32 buttons, 3 POV hats..."
-		nsExec::ExecToLog '"${VJOY_DIR}\x64\vJoyConfig.exe" 1 -f -a x y z rx ry rz sl0 sl1 -b 32 -p 3'
+		DetailPrint "Setting vJoy device 1 to 8 axes, 23 buttons, 3 POV hats..."
+		nsExec::ExecToLog '"${VJOY_DIR}\x64\vJoyConfig.exe" 1 -f -a x y z rx ry rz sl0 sl1 -b 23 -p 3'
 		Pop $0
 		DetailPrint "vJoyConfig finished (code $0)."
 	${Else}
@@ -166,7 +166,7 @@ SectionEnd
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
 	!insertmacro MUI_DESCRIPTION_TEXT ${SecApp} "hori-test.exe (the tray app: driver, test window, setup check and wizard), hori.exe (the same driver in a console window), hori-driver.exe, and Start-menu shortcuts."
 	!insertmacro MUI_DESCRIPTION_TEXT ${SecVJoy} "Installs vJoy 2.2.2.0 (MIT licensed, by Shaul Eizikovich / Brunner Elektronik AG) if it isn't already installed. It has its own uninstaller."
-	!insertmacro MUI_DESCRIPTION_TEXT ${SecVJoyCfg} "Sets vJoy device 1 to 8 axes, 32 buttons and 3 POV hats. This replaces device 1's current setup."
+	!insertmacro MUI_DESCRIPTION_TEXT ${SecVJoyCfg} "Sets vJoy device 1 to 8 axes, 23 buttons and 3 POV hats. This replaces device 1's current setup."
 	!insertmacro MUI_DESCRIPTION_TEXT ${SecWinUSB} "Points the stick (USB 06D3:0F10) at Windows' built-in WinUSB driver. Like Zadig, it trusts a certificate made only for this driver package."
 	!insertmacro MUI_DESCRIPTION_TEXT ${SecStartup} "Starts Flightstick 2 in the system tray when you sign in, so the stick works in games right away. You can turn this off from the tray icon's menu."
 !insertmacro MUI_FUNCTION_DESCRIPTION_END

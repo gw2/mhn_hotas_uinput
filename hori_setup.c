@@ -133,7 +133,7 @@ static void vjoy_path(char *out, size_t size, const char *file)
 
 static void setup_rows(struct setup_row rows[3])
 {
-	int need_buttons = hori_vjoy_buttons_needed() > 32 ? 128 : 32;
+	int need_buttons = hori_vjoy_buttons_needed();
 
 	EnterCriticalSection(&hori_lock);
 	int state = vj_state, buttons = vj_buttons, povs = vj_cont_povs + vj_disc_povs;
@@ -182,8 +182,18 @@ static void setup_rows(struct setup_row rows[3])
 	case VJS_OK:
 		if( axes && buttons >= need_buttons && povs >= SETUP_POVS ) {
 			rows[1].state = ST_OK;
-			snprintf(rows[1].detail, sizeof(rows[1].detail),
-					"Device %u: 8 axes, %d buttons, %d POV hats.", opt_vjoy_id, buttons, povs);
+			if( buttons == need_buttons )
+				snprintf(rows[1].detail, sizeof(rows[1].detail),
+						"Device %u: 8 axes, %d buttons, %d POV hats.", opt_vjoy_id, buttons, povs);
+			else {
+				// Works, but games list buttons nothing ever presses: offer to trim them.
+				snprintf(rows[1].detail, sizeof(rows[1].detail),
+						"Device %u: 8 axes, %d buttons, %d POV hats. Only %d buttons are used; "
+						"the other %d are spare (harmless, but games list them).",
+						opt_vjoy_id, buttons, povs, need_buttons, buttons - need_buttons);
+				rows[1].button = "Remove spare buttons";
+				rows[1].action = ACT_CONFIG_VJOY;
+			}
 			break;
 		}
 		rows[1].state = ST_WARN;
@@ -466,7 +476,7 @@ static DWORD WINAPI setup_thread(LPVOID param)
 		break;
 	case ACT_CONFIG_VJOY:
 		snprintf(params, sizeof(params), "%u -f -a x y z rx ry rz sl0 sl1 -b %d -p %d",
-				opt_vjoy_id, hori_vjoy_buttons_needed() > 32 ? 128 : 32, SETUP_POVS);
+				opt_vjoy_id, hori_vjoy_buttons_needed(), SETUP_POVS);
 		act_vjoyconfig(params, "Setting up vJoy device");
 		break;
 	case ACT_WINUSB:
@@ -488,7 +498,7 @@ static DWORD WINAPI setup_thread(LPVOID param)
 static int setup_confirm(HWND w, int action)
 {
 	char msg[1100];
-	int buttons = hori_vjoy_buttons_needed() > 32 ? 128 : 32;
+	int buttons = hori_vjoy_buttons_needed();
 
 	switch( action ) {
 	case ACT_INSTALL_VJOY:
