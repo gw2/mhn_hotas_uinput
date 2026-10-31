@@ -220,7 +220,6 @@ static const struct art_geo art_geo[] = {
 	{ HB_SW1,           G_RECT,   1030, 672, 40, 50 },
 	{ HB_DPAD3_TOP,     G_CIRCLE,  477, 117,  7, 0 },
 	{ HB_DPAD3_RIGHT,   G_CIRCLE,  491, 131,  7, 0 },
-	{ HB_DPAD3_BOTTOM,  G_CIRCLE,  477, 145,  7, 0 },
 	{ HB_DPAD3_LEFT,    G_CIRCLE,  463, 131,  7, 0 },
 	{ HB_D,             G_CIRCLE,  630, 875, 20, 0 },
 	{ HB_ST,            G_CIRCLE,  475, 922,  9, 0 },
@@ -254,7 +253,7 @@ static int ctl_art_view(int id)
 		return V_STICK_TOP;
 	case HB_FIRE_C: case HB_TRIGGER: case HB_SW1: case CTL_DIAL2: case CTL_STICK:
 		return V_STICK_SIDE;
-	case HB_DPAD3_TOP: case HB_DPAD3_RIGHT: case HB_DPAD3_BOTTOM: case HB_DPAD3_LEFT:
+	case HB_DPAD3_TOP: case HB_DPAD3_RIGHT: case HB_DPAD3_LEFT:
 	case CTL_RUDDER: case CTL_THROTTLE: case CTL_DIAL1:
 		return V_THR_SIDE;
 	case HB_D: case HB_ST: case HB_DPAD2_TOP: case HB_DPAD2_RIGHT: case HB_DPAD2_BOTTOM: case HB_DPAD2_LEFT:
@@ -428,10 +427,12 @@ struct raw_row {
 	uint8_t ir[8], v0[2], v1[2], v3;
 	int8_t mode;
 	uint8_t btn[HB_COUNT];
+	int16_t wiz_at;     /* wizard step (or 100 + prompt during the button step), -1 if not running */
 };
 static struct raw_row raw_ring[RAW_MAX];
 static int raw_count = 0;
 static struct raw_row raw_prev;
+static int raw_wiz_first = -1, raw_wiz_end = -1;    /* rows of the last wizard run */
 
 /* Wizard results for the log: a summary (always) and the measurements (debug level). */
 static struct gbuf wiz_summary, wiz_detail;
@@ -534,6 +535,33 @@ static void gui_log_cal(FILE *f)
 	fprintf(f, "  Press threshold for pressure buttons: %d\n", opt_threshold);
 }
 
+static void raw_wiz_text(int wiz_at, char *out, size_t size);
+
+/* The last log_raw_lines rows in [from, to), oldest first. Called with hori_lock held. */
+static void gui_log_raw_table(FILE *f, const char *title, int from, int to)
+{
+	int start = to - log_raw_lines;
+	if( start < from ) start = from;
+	if( start < raw_count - RAW_MAX ) start = raw_count - RAW_MAX;
+
+	fprintf(f, "\n-- %s: %d rows --\n", title, to - start);
+	fprintf(f, "%9s | %4s %4s %4s %4s %4s %4s %4s %4s | %-14s | %-4s | %-20s | %s\n",
+			"time(s)", "StkX", "StkY", "Rud", "Thr", "HatX", "HatY", "P1", "P2", "buttons raw", "mode", "wizard", "pressed");
+	for( int i = start; i < to; i++ ) {
+		const struct raw_row *r = &raw_ring[i % RAW_MAX];
+		char mode[8], wz[48], pressed[400];
+		if( r->mode >= 0 )
+			snprintf(mode, sizeof(mode), "M%d", r->mode + 1);
+		else
+			snprintf(mode, sizeof(mode), "-");
+		raw_wiz_text(r->wiz_at, wz, sizeof(wz));
+		gui_pressed_list(r->btn, pressed, sizeof(pressed));
+		fprintf(f, "%9.3f | %4d %4d %4d %4d %4d %4d %4d %4d | %02x %02x %02x %02x %02x | %-4s | %-20s | %s\n",
+				r->t / 1000.0, r->ir[0], r->ir[1], r->ir[2], r->ir[3], r->ir[4], r->ir[5], r->ir[6], r->ir[7],
+				r->v0[0], r->v0[1], r->v1[0], r->v1[1], r->v3, mode, wz, pressed);
+	}
+}
+
 /* Write the whole log file (it's rewritten each time, so it always holds the full run). */
 static int gui_log_write(void)
 {
@@ -593,26 +621,20 @@ static int gui_log_write(void)
 	}
 
 	if( log_level ) {
-		int n = raw_count < log_raw_lines ? raw_count : log_raw_lines;
-		if( n > RAW_MAX ) n = RAW_MAX;
-		fprintf(f, "\n== Raw sensor data: last %d changes, oldest first ==\n", n);
+		fprintf(f, "\n== Raw sensor data ==\n");
 		fprintf(f, "Axis columns are the raw bytes from the stick (P1/P2 = pressure channels: idle high, drop when pressed).\n");
 		fprintf(f, "Buttons raw: the two button requests (2 bytes each) and request 0x03.\n");
-		fprintf(f, "A row is logged when an axis moves by 2 or more, or a button, the mode or request 0x03 changes.\n");
-		fprintf(f, "%9s | %4s %4s %4s %4s %4s %4s %4s %4s | %-14s | %-4s | %s\n",
-				"time(s)", "StkX", "StkY", "Rud", "Thr", "HatX", "HatY", "P1", "P2", "buttons raw", "mode", "pressed");
-		for( int i = raw_count - n; i < raw_count; i++ ) {
-			const struct raw_row *r = &raw_ring[i % RAW_MAX];
-			char mode[8], pressed[400];
-			if( r->mode >= 0 )
-				snprintf(mode, sizeof(mode), "M%d", r->mode + 1);
+		fprintf(f, "A row is logged when an axis moves by 3 or more, or a button, the mode, request 0x03 or the wizard step changes.\n");
+
+		// The wizard run's rows get their own table, so idling afterwards doesn't push them out.
+		if( raw_wiz_first >= 0 ) {
+			int end = raw_wiz_end >= 0 ? raw_wiz_end : raw_count;
+			if( raw_count - raw_wiz_first > RAW_MAX )
+				fprintf(f, "\n-- During the last setup wizard run: no longer in memory --\n");
 			else
-				snprintf(mode, sizeof(mode), "-");
-			gui_pressed_list(r->btn, pressed, sizeof(pressed));
-			fprintf(f, "%9.3f | %4d %4d %4d %4d %4d %4d %4d %4d | %02x %02x %02x %02x %02x | %-4s | %s\n",
-					r->t / 1000.0, r->ir[0], r->ir[1], r->ir[2], r->ir[3], r->ir[4], r->ir[5], r->ir[6], r->ir[7],
-					r->v0[0], r->v0[1], r->v1[0], r->v1[1], r->v3, mode, pressed);
+				gui_log_raw_table(f, "During the last setup wizard run", raw_wiz_first, end);
 		}
+		gui_log_raw_table(f, "Most recent", 0, raw_count);
 	}
 
 	LeaveCriticalSection(&hori_lock);
@@ -667,7 +689,7 @@ static const int wiz_prompts[] = {
 	HB_TRIGGER, HB_FIRE_C, HB_SW1, HB_LAUNCH, HB_A, HB_B, HB_HAT,
 	HB_DPAD1_TOP, HB_DPAD1_RIGHT, HB_DPAD1_BOTTOM, HB_DPAD1_LEFT,
 	HB_D, HB_ST, HB_DPAD2_TOP, HB_DPAD2_RIGHT, HB_DPAD2_BOTTOM, HB_DPAD2_LEFT,
-	HB_DPAD3_TOP, HB_DPAD3_RIGHT, HB_DPAD3_BOTTOM, HB_DPAD3_LEFT,
+	HB_DPAD3_TOP, HB_DPAD3_RIGHT, HB_DPAD3_LEFT,
 	PROMPT_MODE + 1, PROMPT_MODE + 2, PROMPT_MODE + 0,
 	PROMPT_DIAL + 0, PROMPT_DIAL + 1,
 };
@@ -842,6 +864,21 @@ static void wiz_prompt_name(int j, char *out, size_t size)
 		snprintf(out, size, "%s", hori_btn_name[p]);
 }
 
+/* The wizard column of the raw log: step title, or the prompt during the button step. */
+static void raw_wiz_text(int wiz_at, char *out, size_t size)
+{
+	if( wiz_at < 0 )
+		snprintf(out, size, "-");
+	else if( wiz_at >= 100 && wiz_at - 100 < NPROMPTS )
+		wiz_prompt_name(wiz_at - 100, out, size);
+	else if( WS_A == wiz_at || WS_B == wiz_at )
+		snprintf(out, size, "%s", hori_axis_label(WS_A == wiz_at ? AX_A : AX_B));
+	else if( wiz_at < WS_COUNT )
+		snprintf(out, size, "%s", wiz_steps[wiz_at].title);
+	else
+		snprintf(out, size, "?");
+}
+
 /* Everything that changed while a dial was turned, for people. */
 static void wiz_dial_text(int k, char *out, size_t size)
 {
@@ -924,6 +961,7 @@ static void wiz_begin_step(int step)
 		break;
 
 	case WS_RESULTS:
+		raw_wiz_end = raw_count;
 		if( wiz.ran[WS_REST] || wiz.ran[WS_STICK] )
 			wiz_compute();
 		if( wiz.ran[WS_BUTTONS] )
@@ -1567,6 +1605,8 @@ static void wiz_start(int kind)
 	if( WK_ANALOG != kind )
 		wiz.seq[wiz.nseq++] = WS_BUTTONS;
 	wiz.pos = -1;
+	raw_wiz_first = raw_count;
+	raw_wiz_end = -1;
 	LeaveCriticalSection(&hori_lock);
 
 	hori_log("Setup wizard started (%s).\n", kinds[kind]);
@@ -1954,6 +1994,8 @@ static LRESULT CALLBACK wiz_wndproc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
 	case WM_DESTROY:
 		EnterCriticalSection(&hori_lock);
 		wiz.active = 0;
+		if( raw_wiz_first >= 0 && raw_wiz_end < 0 )
+			raw_wiz_end = raw_count;   // cancelled part-way
 		LeaveCriticalSection(&hori_lock);
 		wiz_hwnd = NULL;
 		return 0;
@@ -1995,15 +2037,18 @@ static void gui_sample_hook(struct hori_instance *inst)
 	r.v3 = inst->state_vr03;
 	r.mode = (int8_t)inst->mode;
 	memcpy(r.btn, inst->btn, HB_COUNT);
+	r.wiz_at = -1;
+	if( wiz.active && wiz.step > WS_INTRO )
+		r.wiz_at = (WS_BUTTONS == wiz.step && wiz.prompt < NPROMPTS) ? 100 + wiz.prompt : wiz.step;
 
-	// A row when an axis moves by 2+ from the last logged row, or any button changes;
-	// +-1 sensor flicker alone would fill the table in a couple of seconds.
+	// A row when an axis moves by 3+ from the last logged row, or anything else changes;
+	// sensors flicker by up to 2 at rest, which alone would fill the table in seconds.
 	int moved = 0;
 	for( int i=0; i < 8; i++ )
-		if( abs((int)r.ir[i] - (int)raw_prev.ir[i]) >= 2 )
+		if( abs((int)r.ir[i] - (int)raw_prev.ir[i]) >= 3 )
 			moved = 1;
 	if( moved || memcmp(r.v0, raw_prev.v0, 2) || memcmp(r.v1, raw_prev.v1, 2) || r.v3 != raw_prev.v3
-			|| r.mode != raw_prev.mode || memcmp(r.btn, raw_prev.btn, HB_COUNT) ) {
+			|| r.mode != raw_prev.mode || memcmp(r.btn, raw_prev.btn, HB_COUNT) || r.wiz_at != raw_prev.wiz_at ) {
 		r.t = GetTickCount() - log_t0;
 		raw_ring[raw_count++ % RAW_MAX] = r;
 		raw_prev = r;

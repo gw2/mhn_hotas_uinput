@@ -65,12 +65,12 @@ Setup wizard
   A, B, the hat push, each D-pad direction, D, ST, M1/M2/M3, and the two
   dials), and records which signal it really sends, including whether it's
   pressure-sensitive.
-  D-PAD 3: the original driver only knew 3 positions (left/middle/right).
-  It's treated as 4-way here, with "middle" as up and down unknown until the
-  wizard finds it.
+  D-PAD 3 has three positions: up, right and left (the original driver
+  called up "middle"). There is no down.
   Dials: the wizard watches everything the stick sends while you turn each
-  dial, and reports what changed (or that nothing did, which means that dial
-  isn't reported over USB). It doesn't map them to anything yet.
+  dial, and reports what changed. On the stick this was developed with,
+  turning the dials changed nothing at all (no axis, no button bit, nothing
+  in request 0x03), so they aren't reported over USB and can't be mapped.
   If a button doesn't send what the original driver expected, the results
   say so and Apply fixes it. If two buttons send the same signal, it tells
   you straight away.
@@ -118,7 +118,7 @@ Buttons: 1 Trigger   2 Button C   3 Launch   4 Button A   5 Button B
          10/11/12 M1/M2/M3 (with -m buttons)
          (If vJoy has fewer than 2 POVs, D-PAD 1 is buttons 16-19 and
           D-PAD 2 is buttons 20-23. With fewer than 3, D-PAD 3 is buttons
-          14 up, 15 right, 24 down, 13 left.)
+          14 up, 15 right, 13 left.)
 
 Options:
   -m buttons   (default) the M1/M2/M3 switch holds button 10, 11 or 12
@@ -134,7 +134,7 @@ Options:
 Not supported on Windows (yet)
 ------------------------------
   - Rumble (the Linux version has it).
-  - The dials: no USB report for them is known.
+  - The dials: they don't send anything over USB (tested with the wizard).
 
 
 Troubleshooting

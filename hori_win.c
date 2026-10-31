@@ -36,11 +36,11 @@ enum vjd_stat { VJD_STAT_OWN, VJD_STAT_FREE, VJD_STAT_BUSY, VJD_STAT_MISS, VJD_S
 
 /* vJoy button numbers (1-based), same order as hfsd's defaults.
  * 10-12 are M1/M2/M3 with "-m buttons". D-PAD 1/2 use 16-23 only when the
- * vJoy device has fewer than 2 POV hats, D-PAD 3 uses 13-15 and 24 when it
- * has fewer than 3 (13/14/15 were hfsd's left/middle/right). */
+ * vJoy device has fewer than 2 POV hats, D-PAD 3 uses 13-15 when it has
+ * fewer than 3 (hfsd's left/middle/right). */
 static const int hori_btn_num[HB_COUNT] = {
 	1, 2, 3, 4, 5, 6, 7, 8, 9,
-	14, 15, 24, 13,
+	14, 15, 13,
 	16, 17, 18, 19,
 	20, 21, 22, 23,
 };
@@ -50,7 +50,7 @@ static const int hori_btn_num[HB_COUNT] = {
 /* Names as printed on the controller. */
 const char *const hori_btn_name[HB_COUNT] = {
 	"Trigger", "Button C", "Launch", "Button A", "Button B", "Hat push", "SW-1", "Button D", "Button ST",
-	"D-Pad 3 up", "D-Pad 3 right", "D-Pad 3 down", "D-Pad 3 left",
+	"D-Pad 3 up", "D-Pad 3 right", "D-Pad 3 left",
 	"D-Pad 1 up", "D-Pad 1 right", "D-Pad 1 down", "D-Pad 1 left",
 	"D-Pad 2 up", "D-Pad 2 right", "D-Pad 2 down", "D-Pad 2 left",
 };
@@ -62,15 +62,14 @@ const char *const hori_axis_name[AX_COUNT] = {
 /* hori.ini keys for the button map */
 static const char *const hori_btn_key[HB_COUNT] = {
 	"Trigger", "ButtonC", "Launch", "ButtonA", "ButtonB", "HatPush", "SW1", "ButtonD", "ButtonST",
-	"Pad3Up", "Pad3Right", "Pad3Down", "Pad3Left",
+	"Pad3Up", "Pad3Right", "Pad3Left",
 	"Pad1Up", "Pad1Right", "Pad1Down", "Pad1Left",
 	"Pad2Up", "Pad2Right", "Pad2Down", "Pad2Left",
 };
 
 /* The bit positions of hfsd's vendor request layout (see hori_win.h's
  * structs: vr00 is bits 0-15, vr01 bits 16-31); A and B are the pressure channels.
- * hfsd only knew three D-PAD 3 positions (left/middle/right); "middle" is taken
- * as up, and down has no known signal until the setup wizard finds one. */
+ * D-PAD 3 has three positions; hfsd's "middle" is up. */
 const struct hori_btn_map hori_map_default[HB_COUNT] = {
 	[HB_TRIGGER]      = { 14, -1 },
 	[HB_FIRE_C]       = {  0, -1 },
@@ -83,7 +82,6 @@ const struct hori_btn_map hori_map_default[HB_COUNT] = {
 	[HB_ST]           = {  3, -1 },
 	[HB_DPAD3_TOP]    = { 21, -1 },
 	[HB_DPAD3_RIGHT]  = { 20, -1 },
-	[HB_DPAD3_BOTTOM] = { -1, -1 },
 	[HB_DPAD3_LEFT]   = { 22, -1 },
 	[HB_DPAD1_TOP]    = {  4, -1 },
 	[HB_DPAD1_RIGHT]  = {  5, -1 },
@@ -252,6 +250,8 @@ void hori_map_save(void)
 		snprintf(buf, sizeof(buf), "%d,%d", hori_map[i].bit, hori_map[i].chan);
 		WritePrivateProfileStringA("Buttons", hori_btn_key[i], buf, path);
 	}
+	// D-PAD 3 turned out to have no down position; drop the key older builds wrote.
+	WritePrivateProfileStringA("Buttons", "Pad3Down", NULL, path);
 }
 
 uint64_t hori_button_word(const struct hori_instance *inst)
@@ -411,7 +411,7 @@ static int hori_vjoy_init(void)
 	vj_cont_povs = vj_GetContPovNumber(opt_vjoy_id);
 	vj_disc_povs = vj_GetDiscPovNumber(opt_vjoy_id);
 
-	int need = (HORI_MODE_SHIFT == opt_mode) ? 2 * HORI_LAYER_STRIDE + 24 : 24;
+	int need = (HORI_MODE_SHIFT == opt_mode) ? 2 * HORI_LAYER_STRIDE + 23 : 23;
 	if( vj_buttons < need )
 		hori_log("Warning: vJoy device %u has %d buttons, %d are needed for this mode. Raise it in \"Configure vJoy\".\n",
 				opt_vjoy_id, vj_buttons, need);
@@ -432,7 +432,7 @@ static int hori_vjoy_init(void)
 	if( vj_cont_povs + vj_disc_povs < 2 )
 		hori_log("Note: fewer than 2 POV hats on vJoy device %u, so D-PAD 1/2 are buttons 16-23.\n", opt_vjoy_id);
 	if( vj_cont_povs + vj_disc_povs < 3 )
-		hori_log("Note: D-PAD 3 is buttons 13/14/15/24; set 3 POV hats in \"Configure vJoy\" to make it POV 3.\n");
+		hori_log("Note: D-PAD 3 is buttons 13/14/15; set 3 POV hats in \"Configure vJoy\" to make it POV 3.\n");
 
 	return 0;
 }
@@ -746,14 +746,18 @@ static void hori_report(struct hori_instance *inst)
 	// D-PAD 1 and 2 go on POV 1 and 2, D-PAD 3 on POV 3, when vJoy has that many.
 	int povs = vj_cont_povs + vj_disc_povs;
 	int on_pov[HB_COUNT] = { 0 };
-	static const int pov_pad[3] = { HB_DPAD1_TOP, HB_DPAD2_TOP, HB_DPAD3_TOP };
-	for( int p=0; p < 3; p++ ) {
-		if( povs < (p < 2 ? 2 : 3) )
-			continue;
-		int f = pov_pad[p];
-		hori_set_pov(inst, p, btn[f], btn[f + 1], btn[f + 2], btn[f + 3]);
-		for( int d=0; d < 4; d++ )
-			on_pov[f + d] = 1;
+	if( povs >= 2 ) {
+		static const int pov_pad[2] = { HB_DPAD1_TOP, HB_DPAD2_TOP };
+		for( int p=0; p < 2; p++ ) {
+			int f = pov_pad[p];
+			hori_set_pov(inst, p, btn[f], btn[f + 1], btn[f + 2], btn[f + 3]);
+			for( int d=0; d < 4; d++ )
+				on_pov[f + d] = 1;
+		}
+	}
+	if( povs >= 3 ) {
+		hori_set_pov(inst, 2, btn[HB_DPAD3_TOP], btn[HB_DPAD3_RIGHT], 0, btn[HB_DPAD3_LEFT]);
+		on_pov[HB_DPAD3_TOP] = on_pov[HB_DPAD3_RIGHT] = on_pov[HB_DPAD3_LEFT] = 1;
 	}
 
 	int layer = (HORI_MODE_SHIFT == opt_mode && inst->mode >= 0) ? inst->mode : 0;

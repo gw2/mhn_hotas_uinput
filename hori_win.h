@@ -70,10 +70,11 @@ enum hori_mode_style {
 	HORI_MODE_SHIFT,
 };
 
-/* Logical digital buttons. Each d-pad is up, right, down, left in that order. */
+/* Logical digital buttons. D-PAD 1/2 are up, right, down, left in that order;
+ * D-PAD 3 has only three positions (up, right, left). */
 enum {
 	HB_TRIGGER, HB_FIRE_C, HB_LAUNCH, HB_A, HB_B, HB_HAT, HB_SW1, HB_D, HB_ST,
-	HB_DPAD3_TOP, HB_DPAD3_RIGHT, HB_DPAD3_BOTTOM, HB_DPAD3_LEFT,
+	HB_DPAD3_TOP, HB_DPAD3_RIGHT, HB_DPAD3_LEFT,
 	HB_DPAD1_TOP, HB_DPAD1_RIGHT, HB_DPAD1_BOTTOM, HB_DPAD1_LEFT,
 	HB_DPAD2_TOP, HB_DPAD2_RIGHT, HB_DPAD2_BOTTOM, HB_DPAD2_LEFT,
 	HB_COUNT
