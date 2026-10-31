@@ -1,3 +1,6 @@
+// App icon (also used for the tray)
+1 ICON "hori.ico"
+
 // Modern-looking buttons, combo boxes and spinners (common controls v6)
 1 24 "hori.manifest"
 

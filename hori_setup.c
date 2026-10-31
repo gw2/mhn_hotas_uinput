@@ -721,7 +721,7 @@ void setup_register_class(HINSTANCE hi)
 	memset(&wc, 0, sizeof(wc));
 	wc.hInstance = hi;
 	wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-	wc.hIcon = LoadIcon(NULL, IDI_APPLICATION);
+	wc.hIcon = LoadIconA(hi, MAKEINTRESOURCEA(1));
 	wc.lpfnWndProc = setup_wndproc;
 	wc.lpszClassName = "HoriSetup";
 	RegisterClassA(&wc);

@@ -1062,6 +1062,7 @@ static void hori_usage(const char *argv0)
 		"            (default: from the setup wizard, or 20)\n"
 		"  -n ID     vJoy device number to use (default: 1)\n"
 		"  -g        Open the test window (shows every control live)\n"
+		"  -T        Start the test window hidden in the tray (used for Start with Windows)\n"
 		"  -d        Debug: print raw reports as they change\n"
 		"  -P        Debug: read vendor requests 0x00-0x1f once, print them and exit\n"
 		"  -h        This help\n"
@@ -1073,6 +1074,7 @@ static int opt_gui = 1;
 #else
 static int opt_gui = 0;
 #endif
+int opt_tray = 0;
 
 int main(int argc, char **argv)
 {
@@ -1080,7 +1082,7 @@ int main(int argc, char **argv)
 
 	InitializeCriticalSection(&hori_lock);
 
-	while( -1 != (c = getopt(argc, argv, "m:t:n:gdPh")) )
+	while( -1 != (c = getopt(argc, argv, "m:t:n:gTdPh")) )
 	{
 		switch( c ) {
 		case 'm':
@@ -1100,6 +1102,7 @@ int main(int argc, char **argv)
 			if( opt_vjoy_id < 1 || opt_vjoy_id > 16 ) { hori_usage(argv[0]); return EXIT_FAILURE; }
 			break;
 		case 'g': opt_gui = 1; break;
+		case 'T': opt_gui = 1; opt_tray = 1; break;
 		case 'd': opt_debug = 1; break;
 		case 'P': opt_probe = 1; break;
 		case 'h': hori_usage(argv[0]); return EXIT_SUCCESS;
@@ -1107,8 +1110,13 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if( opt_gui )
+	if( opt_gui ) {
+		// One window at a time (two copies can't share the vJoy device):
+		// a second launch just brings the running one forward.
+		if( !hori_gui_single_instance() )
+			return EXIT_SUCCESS;
 		hori_gui_init();
+	}
 
 	SetConsoleCtrlHandler(hori_ctrl_handler, TRUE);
 	hori_cal_load();

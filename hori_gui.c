@@ -2214,24 +2214,224 @@ static void gui_command(HWND w, int id, int code)
 	}
 }
 
+/* ---- tray ----
+ * Closing the window hides it; the tray icon keeps the driver running.
+ * Exit is on the tray icon's menu. */
+
+#define WM_TRAY         (WM_APP + 20)
+#define SHOW_MSG_NAME   "Flightstick2-Show"     /* a second launch asks the running one to show */
+#define RUN_KEY         "Software\\Microsoft\\Windows\\CurrentVersion\\Run"
+#define RUN_VALUE       "Flightstick2"
+
+enum { IDM_TRAY_OPEN = 601, IDM_TRAY_SETUP, IDM_TRAY_AUTOSTART, IDM_TRAY_EXIT };
+
+static NOTIFYICONDATAW tray_nid;
+static UINT msg_taskbar_created, msg_show;
+static int tray_exiting;
+static int tray_told;               /* the "still running" note has been shown */
+static int tray_balloon_setup;      /* clicking the current notification opens the setup check */
+static int tray_state = -1;
+static HANDLE instance_mutex;
+
+int hori_gui_single_instance(void)
+{
+	instance_mutex = CreateMutexA(NULL, TRUE, "Local\\Flightstick2-hori-test");
+	if( instance_mutex && ERROR_ALREADY_EXISTS == GetLastError() ) {
+		HWND other = FindWindowA("HoriTest", NULL);
+		if( other ) {
+			DWORD pid = 0;
+			GetWindowThreadProcessId(other, &pid);
+			AllowSetForegroundWindow(pid);
+			PostMessageA(other, RegisterWindowMessageA(SHOW_MSG_NAME), 0, 0);
+		}
+		return 0;
+	}
+	return 1;
+}
+
+/* Start with Windows: a per-user Run entry that starts this exe in the tray. */
+static int autostart_get(void)
+{
+	char buf[MAX_PATH + 16];
+	DWORD len = sizeof(buf);
+	return ERROR_SUCCESS == RegGetValueA(HKEY_CURRENT_USER, RUN_KEY, RUN_VALUE, RRF_RT_REG_SZ, NULL, buf, &len);
+}
+
+static void autostart_set(int on)
+{
+	HKEY k;
+	if( ERROR_SUCCESS != RegCreateKeyExA(HKEY_CURRENT_USER, RUN_KEY, 0, NULL, 0, KEY_SET_VALUE, NULL, &k, NULL) )
+		return;
+	if( on ) {
+		char exe[MAX_PATH], cmd[MAX_PATH + 16];
+		GetModuleFileNameA(NULL, exe, sizeof(exe));
+		snprintf(cmd, sizeof(cmd), "\"%s\" -T", exe);
+		RegSetValueExA(k, RUN_VALUE, 0, REG_SZ, (const BYTE *)cmd, (DWORD)strlen(cmd) + 1);
+	} else
+		RegDeleteValueA(k, RUN_VALUE);
+	RegCloseKey(k);
+}
+
+static void tray_add(HWND w)
+{
+	memset(&tray_nid, 0, sizeof(tray_nid));
+	tray_nid.cbSize = sizeof(tray_nid);
+	tray_nid.hWnd = w;
+	tray_nid.uID = 1;
+	tray_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP | NIF_SHOWTIP;
+	tray_nid.uCallbackMessage = WM_TRAY;
+	tray_nid.hIcon = (HICON)LoadImageA(GetModuleHandleA(NULL), MAKEINTRESOURCEA(1), IMAGE_ICON,
+			GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), 0);
+	_snwprintf(tray_nid.szTip, sizeof(tray_nid.szTip) / sizeof(WCHAR), L"Flightstick 2");
+	Shell_NotifyIconW(NIM_ADD, &tray_nid);
+	tray_nid.uVersion = NOTIFYICON_VERSION_4;
+	Shell_NotifyIconW(NIM_SETVERSION, &tray_nid);
+	tray_state = -1;
+}
+
+static void tray_balloon(const char *title, const char *text, int opens_setup)
+{
+	tray_nid.uFlags = NIF_INFO;
+	_snwprintf(tray_nid.szInfoTitle, sizeof(tray_nid.szInfoTitle) / sizeof(WCHAR), L"%hs", title);
+	_snwprintf(tray_nid.szInfo, sizeof(tray_nid.szInfo) / sizeof(WCHAR), L"%hs", text);
+	tray_nid.dwInfoFlags = NIIF_USER | NIIF_LARGE_ICON;
+	tray_nid.hBalloonIcon = tray_nid.hIcon;
+	Shell_NotifyIconW(NIM_MODIFY, &tray_nid);
+	tray_balloon_setup = opens_setup;
+}
+
+/* Keep the tray tooltip saying whether the stick is working. */
+static void tray_update_tip(void)
+{
+	static const char *const text[] = {
+		"stick connected", "waiting for the stick", "vJoy isn't set up (open Setup check)",
+	};
+	EnterCriticalSection(&hori_lock);
+	int state = !vj_ok ? 2 : (hori_connected ? 0 : 1);
+	LeaveCriticalSection(&hori_lock);
+	if( state == tray_state )
+		return;
+	tray_state = state;
+	tray_nid.uFlags = NIF_TIP | NIF_SHOWTIP;
+	_snwprintf(tray_nid.szTip, sizeof(tray_nid.szTip) / sizeof(WCHAR), L"Flightstick 2: %hs", text[state]);
+	Shell_NotifyIconW(NIM_MODIFY, &tray_nid);
+}
+
+static void gui_show(HWND w)
+{
+	ShowWindow(w, IsIconic(w) ? SW_RESTORE : SW_SHOW);
+	SetForegroundWindow(w);
+}
+
+static void tray_menu(HWND w, int x, int y)
+{
+	HMENU m = CreatePopupMenu();
+	AppendMenuA(m, MF_STRING, IDM_TRAY_OPEN, "Open Flightstick 2");
+	AppendMenuA(m, MF_STRING, IDM_TRAY_SETUP, "Setup check...");
+	AppendMenuA(m, MF_STRING | (autostart_get() ? MF_CHECKED : 0), IDM_TRAY_AUTOSTART, "Start with Windows");
+	AppendMenuA(m, MF_SEPARATOR, 0, NULL);
+	AppendMenuA(m, MF_STRING, IDM_TRAY_EXIT, "Exit");
+	SetMenuDefaultItem(m, IDM_TRAY_OPEN, FALSE);
+	SetForegroundWindow(w);     // so the menu closes when you click elsewhere
+	TrackPopupMenu(m, TPM_RIGHTBUTTON | TPM_BOTTOMALIGN, x, y, 0, w, NULL);
+	PostMessageA(w, WM_NULL, 0, 0);
+	DestroyMenu(m);
+}
+
+static int tray_command(HWND w, int id)
+{
+	switch( id ) {
+	case IDM_TRAY_OPEN:
+		gui_show(w);
+		return 1;
+	case IDM_TRAY_SETUP:
+		gui_show(w);
+		setup_open(w);
+		return 1;
+	case IDM_TRAY_AUTOSTART: {
+		int on = !autostart_get();
+		autostart_set(on);
+		hori_log("Start with Windows: %s.\n", on ? "on" : "off");
+		return 1;
+	}
+	case IDM_TRAY_EXIT:
+		tray_exiting = 1;
+		DestroyWindow(w);
+		return 1;
+	}
+	return 0;
+}
+
 static LRESULT CALLBACK gui_wndproc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
 {
+	if( msg && msg == msg_show ) {
+		gui_show(w);
+		return 0;
+	}
+	if( msg && msg == msg_taskbar_created ) {   // Explorer restarted: put the icon back
+		tray_add(w);
+		return 0;
+	}
+
 	switch( msg ) {
 	case WM_CREATE:
+		msg_show = RegisterWindowMessageA(SHOW_MSG_NAME);
+		msg_taskbar_created = RegisterWindowMessageA("TaskbarCreated");
 		gui_create_controls(w);
+		tray_add(w);
 		SetTimer(w, 1, 33, NULL);
 		SetTimer(w, 2, 2500, NULL);    // setup check, once the stick has had time to connect
+		SetTimer(w, 3, 1000, NULL);    // tray tooltip
 		return 0;
 	case WM_TIMER:
 		if( 2 == wp ) {
 			KillTimer(w, 2);
-			if( !setup_all_ok() )
-				setup_open(w);
+			if( !setup_all_ok() ) {
+				if( IsWindowVisible(w) )
+					setup_open(w);
+				else
+					tray_balloon("Flightstick 2 needs setting up",
+							"Something the stick needs is missing. Click here to open the Setup check.", 1);
+			}
 			return 0;
 		}
-		InvalidateRect(w, NULL, FALSE);
+		if( 3 == wp ) {
+			tray_update_tip();
+			return 0;
+		}
+		if( IsWindowVisible(w) )
+			InvalidateRect(w, NULL, FALSE);
+		return 0;
+	case WM_TRAY:
+		switch( LOWORD(lp) ) {
+		case NIN_SELECT:
+		case NIN_KEYSELECT:
+			gui_show(w);
+			break;
+		case WM_CONTEXTMENU:
+			tray_menu(w, (short)LOWORD(wp), (short)HIWORD(wp));
+			break;
+		case NIN_BALLOONUSERCLICK:
+			gui_show(w);
+			if( tray_balloon_setup )
+				setup_open(w);
+			break;
+		}
+		return 0;
+	case WM_CLOSE:
+		if( tray_exiting )
+			break;
+		// Hide to the tray: games keep working.
+		ShowWindow(w, SW_HIDE);
+		if( !tray_told ) {
+			tray_told = 1;
+			tray_balloon("Flightstick 2 is still running",
+					"It keeps the stick working in games. Right-click the tray icon to exit.", 0);
+		}
 		return 0;
 	case WM_COMMAND:
+		if( tray_command(w, LOWORD(wp)) )
+			return 0;
 		gui_command(w, LOWORD(wp), HIWORD(wp));
 		return 0;
 	case WM_ERASEBKGND:
@@ -2252,6 +2452,7 @@ static LRESULT CALLBACK gui_wndproc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
 		return 0;
 	}
 	case WM_DESTROY:
+		Shell_NotifyIconW(NIM_DELETE, &tray_nid);
 		if( wiz_hwnd )
 			DestroyWindow(wiz_hwnd);
 		gui_log_write();
@@ -2299,7 +2500,7 @@ void hori_gui(void)
 	memset(&wc, 0, sizeof(wc));
 	wc.hInstance = hi;
 	wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-	wc.hIcon = LoadIcon(NULL, IDI_APPLICATION);
+	wc.hIcon = LoadIconA(hi, MAKEINTRESOURCEA(1));
 
 	wc.lpfnWndProc = gui_wndproc;
 	wc.lpszClassName = "HoriTest";
@@ -2317,7 +2518,7 @@ void hori_gui(void)
 	AdjustWindowRect(&r, style, FALSE);
 	gui_hwnd = CreateWindowA("HoriTest", "Flightstick 2 test", style, CW_USEDEFAULT, CW_USEDEFAULT,
 			r.right - r.left, r.bottom - r.top, NULL, NULL, hi, NULL);
-	ShowWindow(gui_hwnd, SW_SHOW);
+	ShowWindow(gui_hwnd, opt_tray ? SW_HIDE : SW_SHOW);
 
 	MSG m;
 	while( GetMessageA(&m, NULL, 0, 0) > 0 ) {

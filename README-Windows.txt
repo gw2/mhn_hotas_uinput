@@ -15,8 +15,8 @@ prompt it:
   - sets vJoy device 1 to 8 axes, 32 buttons and 3 POV hats (this replaces
     device 1's current setup; untick it on the components page to skip),
   - gives the stick Windows' built-in WinUSB driver with hori-driver.exe,
-  - and, if you tick it, starts the driver when you sign in.
-Then open "Flightstick 2 test and setup" from the Start menu to check it.
+  - and, if you tick it, starts Flightstick 2 in the tray when you sign in.
+Then open "Flightstick 2" from the Start menu to check it.
 Settings and logs go in %APPDATA%\Flightstick2 and %LOCALAPPDATA%\Flightstick2.
 
 Windows may warn that the installer is from an unknown publisher, because
@@ -94,8 +94,22 @@ To undo this later: Device Manager -> find the stick -> Uninstall device,
 tick "Delete the driver software", then unplug and replug it.
 
 
-Testing: hori-test.exe
-----------------------
+The tray app: hori-test.exe
+---------------------------
+hori-test.exe is the driver with a window. While it runs it has an icon in
+the system tray (by the clock; it may be under the ^ arrow), whose tooltip
+says whether the stick is connected. Closing the window sends it to the
+tray and games keep working; click the icon to open it again. Right-click
+the icon for:
+  Open Flightstick 2   the test window
+  Setup check...       vJoy and the stick's driver
+  Start with Windows   starts it in the tray when you sign in (shows up in
+                       Settings > Apps > Startup)
+  Exit                 stops the driver
+Starting it again while it's running just brings the window forward.
+hori-test.exe -T starts it straight into the tray. hori.exe is the same
+driver in a console window, for anyone who prefers that.
+
 Double-click hori-test.exe for a window that shows every control live on a
 line drawing of the controller (buttons light up green, the hat, rudder and
 throttle show their position, the M1/M2/M3 LEDs light up like the real ones),

@@ -18,6 +18,8 @@ Unicode true
 !define VJOY_DIR    "$PROGRAMFILES64\vJoy"
 !define UNINST_KEY  "Software\Microsoft\Windows\CurrentVersion\Uninstall\Flightstick2"
 !define APP_KEY     "Software\Flightstick2"
+!define RUN_KEY     "Software\Microsoft\Windows\CurrentVersion\Run"
+!define TRAY_EXIT   604         ; IDM_TRAY_EXIT in hori_gui.c
 
 Name "Flightstick 2 driver ${VERSION}"
 OutFile "${ROOT}/Flightstick2-Setup-${VERSION}.exe"
@@ -28,8 +30,9 @@ BrandingText "Flightstick 2 driver ${VERSION}"
 
 !define MUI_ABORTWARNING
 !define MUI_COMPONENTSPAGE_SMALLDESC
-!define MUI_FINISHPAGE_RUN "$INSTDIR\hori-test.exe"
-!define MUI_FINISHPAGE_RUN_TEXT "Open Flightstick 2 test to check everything works"
+!define MUI_FINISHPAGE_RUN
+!define MUI_FINISHPAGE_RUN_TEXT "Open Flightstick 2 to check everything works"
+!define MUI_FINISHPAGE_RUN_FUNCTION RunApp
 !define MUI_FINISHPAGE_SHOWREADME "$INSTDIR\README-Windows.txt"
 !define MUI_FINISHPAGE_SHOWREADME_TEXT "Show the readme"
 !define MUI_FINISHPAGE_SHOWREADME_NOTCHECKED
@@ -44,6 +47,26 @@ BrandingText "Flightstick 2 driver ${VERSION}"
 !insertmacro MUI_UNPAGE_INSTFILES
 
 !insertmacro MUI_LANGUAGE "English"
+
+; Close a running copy so its files can be replaced: ask the tray app to exit,
+; then stop anything still running.
+!macro CloseRunning
+	FindWindow $0 "HoriTest"
+	${If} $0 <> 0
+		DetailPrint "Closing the running Flightstick 2..."
+		SendMessage $0 ${WM_COMMAND} ${TRAY_EXIT} 0 /TIMEOUT=3000
+		Sleep 1000
+	${EndIf}
+	nsExec::Exec '"$SYSDIR\taskkill.exe" /F /IM hori-test.exe'
+	Pop $0
+	nsExec::Exec '"$SYSDIR\taskkill.exe" /F /IM hori.exe'
+	Pop $0
+!macroend
+
+; Start the app as the signed-in user rather than elevated like the installer.
+Function RunApp
+	Exec '"$WINDIR\explorer.exe" "$INSTDIR\hori-test.exe"'
+FunctionEnd
 
 Function .onInit
 	${IfNot} ${RunningX64}
@@ -64,6 +87,7 @@ FunctionEnd
 
 Section "Flightstick 2 driver (required)" SecApp
 	SectionIn RO
+	!insertmacro CloseRunning
 	SetOutPath "$INSTDIR"
 	File "${ROOT}/hori.exe"
 	File "${ROOT}/hori-test.exe"
@@ -80,7 +104,8 @@ Section "Flightstick 2 driver (required)" SecApp
 
 	CreateDirectory "$SMPROGRAMS\Flightstick 2"
 	CreateShortcut "$SMPROGRAMS\Flightstick 2\Flightstick 2 driver.lnk" "$INSTDIR\hori.exe"
-	CreateShortcut "$SMPROGRAMS\Flightstick 2\Flightstick 2 test and setup.lnk" "$INSTDIR\hori-test.exe"
+	Delete "$SMPROGRAMS\Flightstick 2\Flightstick 2 test and setup.lnk"   ; 0.3.0 pre-release name
+	CreateShortcut "$SMPROGRAMS\Flightstick 2\Flightstick 2.lnk" "$INSTDIR\hori-test.exe"
 	CreateShortcut "$SMPROGRAMS\Flightstick 2\Uninstall Flightstick 2 driver.lnk" "$INSTDIR\uninstall.exe"
 
 	WriteUninstaller "$INSTDIR\uninstall.exe"
@@ -130,16 +155,18 @@ Section "The stick's USB driver (WinUSB)" SecWinUSB
 	${EndIf}
 SectionEnd
 
-Section /o "Start the driver with Windows" SecStartup
-	CreateShortcut "$SMSTARTUP\Flightstick 2 driver.lnk" "$INSTDIR\hori.exe" "" "" 0 SW_SHOWMINIMIZED
+Section /o "Start with Windows (in the tray)" SecStartup
+	; The same entry the tray menu's "Start with Windows" sets.
+	WriteRegStr HKCU "${RUN_KEY}" "Flightstick2" '"$INSTDIR\hori-test.exe" -T'
+	Delete "$SMSTARTUP\Flightstick 2 driver.lnk"
 SectionEnd
 
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
-	!insertmacro MUI_DESCRIPTION_TEXT ${SecApp} "hori.exe (the driver), hori-test.exe (test window, setup check and wizard), hori-driver.exe, and Start-menu shortcuts."
+	!insertmacro MUI_DESCRIPTION_TEXT ${SecApp} "hori-test.exe (the tray app: driver, test window, setup check and wizard), hori.exe (the same driver in a console window), hori-driver.exe, and Start-menu shortcuts."
 	!insertmacro MUI_DESCRIPTION_TEXT ${SecVJoy} "Installs vJoy 2.2.2.0 (MIT licensed, by Shaul Eizikovich / Brunner Elektronik AG) if it isn't already installed. It has its own uninstaller."
 	!insertmacro MUI_DESCRIPTION_TEXT ${SecVJoyCfg} "Sets vJoy device 1 to 8 axes, 32 buttons and 3 POV hats. This replaces device 1's current setup."
 	!insertmacro MUI_DESCRIPTION_TEXT ${SecWinUSB} "Points the stick (USB 06D3:0F10) at Windows' built-in WinUSB driver. Like Zadig, it trusts a certificate made only for this driver package."
-	!insertmacro MUI_DESCRIPTION_TEXT ${SecStartup} "Starts hori.exe, minimized, when you sign in to Windows."
+	!insertmacro MUI_DESCRIPTION_TEXT ${SecStartup} "Starts Flightstick 2 in the system tray when you sign in, so the stick works in games right away. You can turn this off from the tray icon's menu."
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
 
 Function un.onInit
@@ -148,12 +175,16 @@ Function un.onInit
 FunctionEnd
 
 Section "Uninstall"
+	!insertmacro CloseRunning
 	MessageBox MB_YESNO|MB_ICONQUESTION "Also remove the stick's WinUSB driver?$\n$\nChoose No if another program uses the stick through WinUSB." IDNO keep_driver
 		nsExec::ExecToLog '"$INSTDIR\hori-driver.exe" uninstall'
 		Pop $0
 	keep_driver:
 
+	DeleteRegValue HKCU "${RUN_KEY}" "Flightstick2"
 	Delete "$SMSTARTUP\Flightstick 2 driver.lnk"
+	Delete "$SMPROGRAMS\Flightstick 2\Flightstick 2.lnk"
+	Delete "$SMPROGRAMS\Flightstick 2\Flightstick 2 test and setup.lnk"
 	Delete "$SMPROGRAMS\Flightstick 2\Flightstick 2 driver.lnk"
 	Delete "$SMPROGRAMS\Flightstick 2\Flightstick 2 test and setup.lnk"
 	Delete "$SMPROGRAMS\Flightstick 2\Uninstall Flightstick 2 driver.lnk"

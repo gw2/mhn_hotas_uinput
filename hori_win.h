@@ -199,6 +199,8 @@ int hori_word_bit_have(const struct hori_instance *inst, int bit);
 const char *hori_axis_label(int ax);
 
 /* hori_gui.c */
+extern int opt_tray;            /* -T: start hidden in the tray */
+int hori_gui_single_instance(void);
 void hori_gui_init(void);
 void hori_gui(void);
 

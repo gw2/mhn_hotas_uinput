@@ -1,2 +1,4 @@
+1 ICON "hori.ico"
+
 // hori-driver.exe always runs as admin
 1 24 "hori_driver.manifest"
