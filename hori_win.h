@@ -146,7 +146,13 @@ extern int opt_threshold;
 extern int opt_debug;
 extern UINT opt_vjoy_id;
 
-extern int vj_ok, vj_buttons, vj_cont_povs, vj_disc_povs;
+/* Why vJoy is or isn't usable (vj_state). */
+enum { VJS_OK, VJS_NOT_INSTALLED, VJS_DISABLED, VJS_BUSY, VJS_NO_DEVICE, VJS_FAILED };
+
+/* The stick's USB state, for the setup check (hori_usb_state). */
+enum { USBS_CONNECTED, USBS_NO_WINUSB, USBS_NOT_PLUGGED, USBS_CONNECTING };
+
+extern int vj_ok, vj_state, vj_buttons, vj_cont_povs, vj_disc_povs;
 extern LONG vj_sent, vj_failed;
 extern char vj_error[200];
 
@@ -179,6 +185,11 @@ void hori_ini_path(char *out, size_t size);
 void hori_cal_load(void);
 void hori_cal_save(void);
 void hori_map_save(void);
+int hori_vjoy_axes_ok(void);
+int hori_vjoy_buttons_needed(void);
+void hori_vjoy_release(void);
+void hori_vjoy_reinit(void);
+int hori_usb_state(void);
 uint64_t hori_button_word(const struct hori_instance *inst);
 int hori_word_bit_have(const struct hori_instance *inst, int bit);
 const char *hori_axis_label(int ax);
@@ -186,5 +197,11 @@ const char *hori_axis_label(int ax);
 /* hori_gui.c */
 void hori_gui_init(void);
 void hori_gui(void);
+
+/* hori_setup.c: the setup check (vJoy and the stick's WinUSB driver) */
+extern HFONT gui_font, gui_bold, gui_small;
+void setup_register_class(HINSTANCE hi);
+void setup_open(HWND owner);
+int setup_all_ok(void);
 
 #endif

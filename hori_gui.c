@@ -40,7 +40,7 @@
 
 enum {
 	IDC_LEVEL = 101, IDC_RAWLINES, IDC_RAWSPIN, IDC_LOGMODE, IDC_SAVELOG, IDC_OPENLOGS,
-	IDC_WIZARD, IDC_RESETCAL,
+	IDC_WIZARD, IDC_RESETCAL, IDC_SETUP,
 	IDC_WIZ_SKIP = 201, IDC_WIZ_NEXT, IDC_WIZ_CANCEL, IDC_WIZ_ALL, IDC_WIZ_ANALOG, IDC_WIZ_BUTTONS,
 	IDC_WIZ_BACK, IDC_WIZ_SKIPBTN,
 };
@@ -50,7 +50,8 @@ enum {
 	CTL_MODE = HB_COUNT, CTL_STICK, CTL_HAT, CTL_RUDDER, CTL_THROTTLE, CTL_DIAL1, CTL_DIAL2,
 };
 
-static HFONT gui_font, gui_bold, gui_small, gui_big;
+HFONT gui_font, gui_bold, gui_small;
+static HFONT gui_big;
 static HWND gui_hwnd, gui_rawlines, gui_rawspin;
 
 /* ---- small helpers ---- */
@@ -2193,7 +2194,7 @@ static void gui_paint(HDC dc)
 	y += 36;
 	char logline[MAX_PATH + 32];
 	snprintf(logline, sizeof(logline), "Log file: %s", log_path);
-	RECT lr = { 340, y - 2, GUI_W - 16, y + 16 };
+	RECT lr = { 500, y - 2, GUI_W - 16, y + 16 };
 	SetTextColor(dc, GUI_DIM);
 	DrawTextA(dc, logline, -1, &lr, DT_PATH_ELLIPSIS | DT_NOPREFIX | DT_SINGLELINE);
 
@@ -2206,14 +2207,14 @@ static void gui_paint(HDC dc)
 		else
 			list_add(dz, sizeof(dz), "%s %d/%d", hori_axis_name[i], cal[i].deadzone, cal[i].edge);
 	}
-	RECT dr = { 340, y + 16, GUI_W - 16, y + 34 };
+	RECT dr = { 500, y + 16, GUI_W - 16, y + 34 };
 	if( dz[0] ) {
 		char line[460];
 		snprintf(line, sizeof(line), "Dead zones: %s", dz);
 		SetTextColor(dc, GUI_TEXT);
 		DrawTextA(dc, line, -1, &dr, DT_END_ELLIPSIS | DT_NOPREFIX | DT_SINGLELINE);
 	} else
-		gui_text(dc, 340, y + 16, GUI_DIM, "Dead zones: none yet. Run the setup wizard to set them.");
+		gui_text(dc, 500, y + 16, GUI_DIM, "Dead zones: none yet. Run the setup wizard to set them.");
 }
 
 static void gui_update_rawlines_enabled(void)
@@ -2254,6 +2255,7 @@ static void gui_create_controls(HWND w)
 	y += 36;
 	gui_control(w, 0, "BUTTON", "Setup wizard...", BS_PUSHBUTTON | WS_TABSTOP, 16, y, 150, 30, IDC_WIZARD);
 	gui_control(w, 0, "BUTTON", "Reset dead zones", BS_PUSHBUTTON | WS_TABSTOP, 176, y, 150, 30, IDC_RESETCAL);
+	gui_control(w, 0, "BUTTON", "Setup check...", BS_PUSHBUTTON | WS_TABSTOP, 336, y, 150, 30, IDC_SETUP);
 
 	gui_update_rawlines_enabled();
 }
@@ -2305,6 +2307,10 @@ static void gui_command(HWND w, int id, int code)
 		wiz_open();
 		break;
 
+	case IDC_SETUP:
+		setup_open(w);
+		break;
+
 	case IDC_RESETCAL:
 		if( IDYES != MessageBoxA(w, "Remove all dead zones and go back to the raw stick values?\n\n"
 				"(Button signals found by the wizard are kept.)",
@@ -2326,8 +2332,15 @@ static LRESULT CALLBACK gui_wndproc(HWND w, UINT msg, WPARAM wp, LPARAM lp)
 	case WM_CREATE:
 		gui_create_controls(w);
 		SetTimer(w, 1, 33, NULL);
+		SetTimer(w, 2, 2500, NULL);    // setup check, once the stick has had time to connect
 		return 0;
 	case WM_TIMER:
+		if( 2 == wp ) {
+			KillTimer(w, 2);
+			if( !setup_all_ok() )
+				setup_open(w);
+			return 0;
+		}
 		InvalidateRect(w, NULL, FALSE);
 		return 0;
 	case WM_COMMAND:
@@ -2407,6 +2420,8 @@ void hori_gui(void)
 	wc.lpfnWndProc = wiz_wndproc;
 	wc.lpszClassName = "HoriWizard";
 	RegisterClassA(&wc);
+
+	setup_register_class(hi);
 
 	DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN;
 	RECT r = { 0, 0, GUI_W, GUI_H };

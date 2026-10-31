@@ -5,6 +5,24 @@ hori.exe reads the stick and feeds a vJoy virtual joystick that games see
 as a normal controller. One-time setup takes about 10 minutes.
 
 
+Quick setup: the Setup check
+----------------------------
+Plug in the stick and run hori-test.exe. If anything is missing it opens
+the Setup check, which checks three things and offers to fix each one:
+  1. vJoy installed      -> downloads vJoy 2.2.2.0 and runs its installer
+  2. vJoy device set up  -> runs vJoyConfig: 8 axes, 32 buttons, 3 POV hats
+                            (this replaces vJoy device 1's current setup)
+  3. Stick has WinUSB    -> downloads Zadig 2.9 and opens it with WinUSB
+                            selected; pick USB ID 06D3 0F10, click Install Driver
+Nothing is downloaded or installed until you click and say yes, and Windows
+asks for admin permission for each install. Downloads come from the official
+GitHub releases (vJoy is MIT licensed, Zadig GPLv3) and are checked against
+a known SHA-256 fingerprint before they run; files go in
+%LOCALAPPDATA%\hori-setup. You can open it any time with "Setup check...".
+
+The manual steps below do the same by hand.
+
+
 1. Install vJoy (the virtual joystick)
 --------------------------------------
 Download the signed v2.2.2.0 release from

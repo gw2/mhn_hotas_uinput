@@ -136,6 +136,7 @@ UINT opt_vjoy_id = 1;
 static int opt_threshold_set = 0;
 
 int vj_ok = 0;
+int vj_state = VJS_NOT_INSTALLED;
 int vj_buttons = 0;
 int vj_cont_povs = 0;
 int vj_disc_povs = 0;
@@ -358,7 +359,7 @@ static int hori_vjoy_load(void)
 		}
 	}
 	if( !dll ) {
-		hori_vj_error("Could not load vJoyInterface.dll. Is vJoy installed?");
+		hori_vj_error("Could not load vJoyInterface.dll. Is vJoy installed? (hori-test.exe's Setup check can install it.)");
 		return -1;
 	}
 
@@ -383,35 +384,42 @@ static int hori_vjoy_load(void)
 
 static int hori_vjoy_init(void)
 {
+	vj_state = VJS_NOT_INSTALLED;
 	if( 0 != hori_vjoy_load() )
 		return -1;
 
 	if( !vj_Enabled() ) {
+		vj_state = VJS_DISABLED;
 		hori_vj_error("vJoy is installed but not enabled. Open \"Configure vJoy\" and enable it.");
 		return -1;
 	}
 
 	enum vjd_stat st = vj_GetStatus(opt_vjoy_id);
 	if( VJD_STAT_BUSY == st ) {
+		vj_state = VJS_BUSY;
 		hori_vj_error("vJoy device %u is in use by another program (another hori.exe?).", opt_vjoy_id);
 		return -1;
 	}
 	if( VJD_STAT_MISS == st || VJD_STAT_UNKN == st ) {
+		vj_state = VJS_NO_DEVICE;
 		hori_vj_error("vJoy device %u doesn't exist. Create it in \"Configure vJoy\".", opt_vjoy_id);
 		return -1;
 	}
 	if( VJD_STAT_OWN != st && !vj_Acquire(opt_vjoy_id) ) {
+		vj_state = VJS_FAILED;
 		hori_vj_error("Could not acquire vJoy device %u.", opt_vjoy_id);
 		return -1;
 	}
 	vj_ok = 1;
+	vj_state = VJS_OK;
+	vj_error[0] = 0;
 	vj_Reset(opt_vjoy_id);
 
 	vj_buttons = vj_GetButtonNumber(opt_vjoy_id);
 	vj_cont_povs = vj_GetContPovNumber(opt_vjoy_id);
 	vj_disc_povs = vj_GetDiscPovNumber(opt_vjoy_id);
 
-	int need = (HORI_MODE_SHIFT == opt_mode) ? 2 * HORI_LAYER_STRIDE + 23 : 23;
+	int need = hori_vjoy_buttons_needed();
 	if( vj_buttons < need )
 		hori_log("Warning: vJoy device %u has %d buttons, %d are needed for this mode. Raise it in \"Configure vJoy\".\n",
 				opt_vjoy_id, vj_buttons, need);
@@ -435,6 +443,53 @@ static int hori_vjoy_init(void)
 		hori_log("Note: D-PAD 3 is buttons 13/14/15; set 3 POV hats in \"Configure vJoy\" to make it POV 3.\n");
 
 	return 0;
+}
+
+/* All 8 axes the stick uses are enabled on the vJoy device. */
+int hori_vjoy_axes_ok(void)
+{
+	static const UINT axes[] = { HID_USAGE_X, HID_USAGE_Y, HID_USAGE_Z, HID_USAGE_RX, HID_USAGE_RY,
+		HID_USAGE_RZ, HID_USAGE_SL0, HID_USAGE_SL1 };
+	if( !vj_ok )
+		return 0;
+	for( size_t i=0; i < sizeof(axes) / sizeof(axes[0]); i++ )
+		if( !vj_GetAxisExist(opt_vjoy_id, axes[i]) )
+			return 0;
+	return 1;
+}
+
+/* Buttons the vJoy device needs for the current -m mode. */
+int hori_vjoy_buttons_needed(void)
+{
+	return (HORI_MODE_SHIFT == opt_mode) ? 2 * HORI_LAYER_STRIDE + 23 : 23;
+}
+
+/* Let go of the vJoy device, so vJoy can be reinstalled or reconfigured. */
+void hori_vjoy_release(void)
+{
+	EnterCriticalSection(&hori_lock);
+	if( vj_ok ) {
+		vj_Reset(opt_vjoy_id);
+		vj_Relinquish(opt_vjoy_id);
+	}
+	vj_ok = 0;
+	LeaveCriticalSection(&hori_lock);
+}
+
+/* Pick vJoy up again after an install or reconfiguration, and resend everything. */
+void hori_vjoy_reinit(void)
+{
+	hori_vjoy_release();
+	EnterCriticalSection(&hori_lock);
+	vj_error[0] = 0;
+	hori_vjoy_init();
+	for( int i=0; i < 16; i++ )
+		hori_inst.axis_last[i] = -1;
+	for( int i=0; i < 3; i++ )
+		hori_inst.pov_last[i] = (DWORD)-2;
+	memset(hori_inst.btn, 0, sizeof(hori_inst.btn));
+	hori_inst.mode = -1;
+	LeaveCriticalSection(&hori_lock);
 }
 
 static void hori_vj_count(BOOL ok)
@@ -832,10 +887,43 @@ static void hori_usb_diagnose(void)
 			libusb_close(h);
 		else
 			hori_log("The stick is plugged in but can't be opened (%s).\n"
-					"Install the WinUSB driver for it with Zadig (see README-Windows.txt).\n",
+					"Install the WinUSB driver for it: hori-test.exe's Setup check can do it, or use Zadig (see README-Windows.txt).\n",
 					libusb_strerror(err));
 	}
 	libusb_free_device_list(list, 1);
+}
+
+/* For the setup check: is the stick in use, plugged in without WinUSB, or not plugged in? */
+int hori_usb_state(void)
+{
+	int state = USBS_NOT_PLUGGED;
+
+	EnterCriticalSection(&hori_lock);
+	int connected = hori_connected;
+	LeaveCriticalSection(&hori_lock);
+	if( connected )
+		return USBS_CONNECTED;
+
+	libusb_device **list;
+	ssize_t n = libusb_get_device_list(NULL, &list);
+	for( ssize_t i=0; i < n; i++ ) {
+		struct libusb_device_descriptor desc;
+		if( LIBUSB_SUCCESS != libusb_get_device_descriptor(list[i], &desc) )
+			continue;
+		if( HORI_VENDOR_ID != desc.idVendor || HORI_PRODUCT_ID != desc.idProduct )
+			continue;
+
+		libusb_device_handle *h;
+		if( LIBUSB_SUCCESS == libusb_open(list[i], &h) ) {
+			libusb_close(h);
+			state = USBS_CONNECTING;    // openable: the worker will pick it up in a moment
+		} else
+			state = USBS_NO_WINUSB;
+		break;
+	}
+	if( n >= 0 )
+		libusb_free_device_list(list, 1);
+	return state;
 }
 
 static DWORD WINAPI hori_run(LPVOID unused)

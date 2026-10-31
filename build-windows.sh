@@ -4,8 +4,8 @@
 set -e
 LIBUSB="$1"
 CFLAGS="-Wall -Wextra -Wno-unused-parameter -O2 -I$LIBUSB/include"
-LIBS="$LIBUSB/MinGW64/static/libusb-1.0.a -lwinmm -lgdi32 -lcomctl32 -lshell32 -static"
-SRC="hori_win.c hori_gui.c"
+LIBS="$LIBUSB/MinGW64/static/libusb-1.0.a -lwinmm -lgdi32 -lcomctl32 -lshell32 -lurlmon -lbcrypt -lole32 -static"
+SRC="hori_win.c hori_gui.c hori_setup.c"
 
 x86_64-w64-mingw32-windres hori.rc -O coff -o hori_res.o
 
