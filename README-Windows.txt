@@ -163,4 +163,13 @@ Stuck at "Waiting for the stick..." -> check that it's plugged in, then redo ste
 A game sees nothing                 -> some games only take Xbox controllers;
                                        tools like Steam Input can remap vJoy.
 
+Credits and licenses
+--------------------
+This is a fork of mhn_hotas_uinput by Daniel O'Neill (MIT, see LICENSE).
+It builds on hfsd (the original Windows driver, by tamanegi.org), libusb
+1.0.27 (built into the exes; LGPL 2.1, see LICENSE-libusb.txt), and uses
+vJoy (MIT) and Zadig (GPLv3), which the Setup check downloads but which
+aren't included. hori-test.exe's "About..." button lists them with links;
+THIRD-PARTY-NOTICES.txt has the details.
+
 Building: ./build-windows.sh <libusb-1.0.27 Windows release folder> (needs mingw-w64)

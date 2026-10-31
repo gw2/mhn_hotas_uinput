@@ -13,6 +13,16 @@ This is a userspace implementation of my kernel driver at https://github.com/dan
 
 Used https://www.tamanegi.org/prog/hfsd/ as reference, and copied the data structs for control messages.
 
+This fork ([gw2/mhn_hotas_uinput](https://github.com/gw2/mhn_hotas_uinput)) adds a Windows version and builds on:
+
+* [mhn_hotas_uinput](https://github.com/danieloneill/mhn_hotas_uinput) by Daniel O'Neill: the original driver (MIT, see `LICENSE`).
+* [hfsd](https://www.tamanegi.org/prog/hfsd/) by tamanegi.org: the USB protocol (free, no warranty, no restrictions).
+* [libusb](https://libusb.info) 1.0.27: built into the Windows exes (LGPL 2.1 or later, see `LICENSE-libusb.txt`).
+* [vJoy](https://github.com/BrunnerInnovation/vJoy) by Shaul Eizikovich, maintained by Brunner Elektronik AG (MIT): downloaded by the Windows setup check, not included.
+* [Zadig](https://zadig.akeo.ie) / [libwdi](https://github.com/pbatard/libwdi) by Pete Batard (GPLv3 / LGPLv3): downloaded by the Windows setup check, not included.
+
+Details, including what each is used for: `THIRD-PARTY-NOTICES.txt`. None of these projects offers a donation link.
+
 ## Notes
 
 * The original button and axis numbering is unchanged, so existing bindings keep working. New axes are added after the existing ones.

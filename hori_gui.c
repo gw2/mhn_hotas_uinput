@@ -40,7 +40,7 @@
 
 enum {
 	IDC_LEVEL = 101, IDC_RAWLINES, IDC_RAWSPIN, IDC_LOGMODE, IDC_SAVELOG, IDC_OPENLOGS,
-	IDC_WIZARD, IDC_RESETCAL, IDC_SETUP,
+	IDC_WIZARD, IDC_RESETCAL, IDC_SETUP, IDC_ABOUT,
 	IDC_WIZ_SKIP = 201, IDC_WIZ_NEXT, IDC_WIZ_CANCEL, IDC_WIZ_ALL, IDC_WIZ_ANALOG, IDC_WIZ_BUTTONS,
 	IDC_WIZ_BACK, IDC_WIZ_SKIPBTN,
 };
@@ -2140,6 +2140,8 @@ static void gui_create_controls(HWND w)
 	gui_control(w, 0, "BUTTON", "Reset dead zones", BS_PUSHBUTTON | WS_TABSTOP, 176, y, 150, 30, IDC_RESETCAL);
 	gui_control(w, 0, "BUTTON", "Setup check...", BS_PUSHBUTTON | WS_TABSTOP, 336, y, 150, 30, IDC_SETUP);
 
+	gui_control(w, 0, "BUTTON", "About...", BS_PUSHBUTTON | WS_TABSTOP, GUI_W - 116, 10, 100, 28, IDC_ABOUT);
+
 	gui_update_rawlines_enabled();
 }
 
@@ -2192,6 +2194,10 @@ static void gui_command(HWND w, int id, int code)
 
 	case IDC_SETUP:
 		setup_open(w);
+		break;
+
+	case IDC_ABOUT:
+		about_open(w);
 		break;
 
 	case IDC_RESETCAL:
@@ -2276,7 +2282,7 @@ void hori_gui(void)
 {
 	HINSTANCE hi = GetModuleHandleA(NULL);
 
-	INITCOMMONCONTROLSEX icc = { sizeof(icc), ICC_UPDOWN_CLASS | ICC_STANDARD_CLASSES };
+	INITCOMMONCONTROLSEX icc = { sizeof(icc), ICC_UPDOWN_CLASS | ICC_STANDARD_CLASSES | ICC_LINK_CLASS };
 	InitCommonControlsEx(&icc);
 
 	gui_font = CreateFontA(-15, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, "Segoe UI");
@@ -2305,6 +2311,7 @@ void hori_gui(void)
 	RegisterClassA(&wc);
 
 	setup_register_class(hi);
+	about_register_class(hi);
 
 	DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN;
 	RECT r = { 0, 0, GUI_W, GUI_H };

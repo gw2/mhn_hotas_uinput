@@ -10,6 +10,8 @@
 
 #include <libusb.h>
 
+#define HORI_VERSION "0.2.0"
+
 struct hori_input_ir {
 	uint8_t	pos_x;
 	uint8_t	pos_y;
@@ -203,5 +205,9 @@ extern HFONT gui_font, gui_bold, gui_small;
 void setup_register_class(HINSTANCE hi);
 void setup_open(HWND owner);
 int setup_all_ok(void);
+
+/* hori_about.c: credits and licenses */
+void about_register_class(HINSTANCE hi);
+void about_open(HWND owner);
 
 #endif

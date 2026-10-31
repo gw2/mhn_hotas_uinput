@@ -1,0 +1,90 @@
+Third-party notices and credits
+===============================
+
+This driver for the Mitsubishi HORI/Namco Flightstick 2 (Ace Combat 5) is
+built on the work of the projects below. Thank you to all of them.
+None of them offers a donation link; see each entry.
+
+
+mhn_hotas_uinput: the project this is a fork of
+-----------------------------------------------
+Author:   Daniel O'Neill
+Links:    https://github.com/danieloneill/mhn_hotas_uinput
+          https://oneill.app
+License:  MIT (see LICENSE). This fork keeps that license and notice.
+Used for: The original Linux userspace driver (hori.c) this project started
+          from.
+Donate:   No donation link offered.
+
+
+hfsd: the original Windows driver for the Flight Stick 2 (2004)
+----------------------------------------------------------------
+Author:   tamanegi.org (webmaster@tamanegi.org)
+Links:    https://www.tamanegi.org/prog/hfsd/
+License:  Released free of charge, without warranty and without
+          restrictions (equivalent to public domain, per its README).
+Used for: The USB protocol: the report layouts and button bit positions
+          (copied into hori.c and hori_win.h), the A/B pressure scaling,
+          and the rumble request.
+Donate:   No donation link offered.
+
+
+libusb 1.0.27: USB access library (INCLUDED in hori.exe and hori-test.exe)
+--------------------------------------------------------------------------
+Authors:  Johannes Erdfelt, Daniel Drake, Peter Stuge, Nathan Hjelm,
+          Pete Batard, Ludovic Rousseau, and the libusb contributors
+          (see AUTHORS in the libusb source).
+Links:    https://libusb.info
+          https://github.com/libusb/libusb  (source of the exact version
+          used: tag v1.0.27)
+License:  GNU Lesser General Public License, version 2.1 or later. The full
+          text is in LICENSE-libusb.txt.
+Used for: Talking to the stick over USB. The Windows exes are statically
+          linked with the unmodified libusb 1.0.27 Windows release
+          (MinGW64 build). This project's complete source and build script
+          (build-windows.sh) are public, so you can rebuild the exes
+          against a modified libusb.
+Donate:   No donation link offered.
+
+
+vJoy: the virtual joystick games see (DOWNLOADED, not included)
+---------------------------------------------------------------
+Authors:  Shaul Eizikovich (original author); maintained by
+          Brunner Elektronik AG
+Links:    https://github.com/BrunnerInnovation/vJoy
+          https://sourceforge.net/projects/vjoystick/
+License:  MIT.
+Used for: hori.exe feeds the stick into a vJoy device through
+          vJoyInterface.dll, loaded from vJoy's own install folder. The
+          Setup check can download the official vJoy 2.2.2.0 installer
+          from the GitHub release above and run it, and runs vJoy's own
+          vJoyConfig tool. vJoy is not redistributed with this project.
+Donate:   No donation link offered.
+
+
+Zadig / libwdi: installs the stick's WinUSB driver (DOWNLOADED, not included)
+-----------------------------------------------------------------------------
+Author:   Pete Batard (Akeo Consulting)
+Links:    https://zadig.akeo.ie
+          https://github.com/pbatard/libwdi
+License:  Zadig: GNU GPL version 3 or later. libwdi: GNU LGPL version 3 or
+          later.
+Used for: The Setup check can download the official Zadig 2.9 from the
+          libwdi GitHub release and open it with a zadig.ini that selects
+          WinUSB. Zadig is not redistributed with this project.
+Donate:   No donation link offered. Pete Batard's Rufus site
+          (https://rufus.ie) points people who want to give something to
+          the Free Software Foundation instead: https://www.fsf.org/
+
+
+Controller drawing (hori-diagram.bmp)
+-------------------------------------
+Supplied by this fork's maintainer (gw2), based on the control labels
+printed on the controller.
+
+
+Trademarks
+----------
+HORI, Namco and Ace Combat are trademarks of their respective owners.
+This project isn't affiliated with or endorsed by HORI, Bandai Namco,
+Brunner Elektronik AG, Akeo Consulting or the libusb project.
