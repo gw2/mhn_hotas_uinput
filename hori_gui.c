@@ -652,7 +652,7 @@ static const struct { const char *title; const char *text; } wiz_steps[WS_COUNT]
 	  "Move the stick slowly all the way to every edge and corner. Circling the full range a couple of times works well." },
 	{ "Stick: centring",
 	  "Push the stick all the way in any direction, then let go so it springs back by itself.\n\n"
-	  "Do this 5 times, in different directions." },
+	  "Do this 5 times, in different directions. Wait for it to stop before the next one." },
 	{ "Hat",
 	  "First move the hat all the way in every direction.\n\n"
 	  "Then flick it to the side and let go so it springs back by itself, 3 times." },
@@ -719,6 +719,7 @@ static struct {
 	/* spring-back detection */
 	int away;
 	int settle_pending;     /* came back; note where it settles once it stops */
+	DWORD return_time;      /* when the last spring-back was counted */
 	int range_done;         /* hat/rudder: full range seen, now counting spring-backs */
 	DWORD stable_since;
 	int last[AX_COUNT];
@@ -965,6 +966,18 @@ static void wiz_next_prompt(void)
 		wiz_prompt_begin();
 }
 
+/* After a spring-back is counted, pushes are ignored for this long, and until it
+ * has settled (up to WIZ_RETURN_MAX): a control that flops past the centre
+ * would otherwise count again. */
+#define WIZ_RETURN_GAP  700
+#define WIZ_RETURN_MAX  1500
+
+static int wiz_return_wait(DWORD now)
+{
+	DWORD since = now - wiz.return_time;
+	return wiz.returns && (since < WIZ_RETURN_GAP || (wiz.settle_pending && since < WIZ_RETURN_MAX));
+}
+
 /* Count "pushed away, then came back near the centre" as soon as it's back, and
  * note where it settles once it stops moving. */
 static void wiz_track_returns(const int *axes, int n, int away, const int *v, DWORD now)
@@ -981,13 +994,14 @@ static void wiz_track_returns(const int *axes, int n, int away, const int *v, DW
 	if( moving )
 		wiz.stable_since = now;
 
-	if( pushed ) {
+	if( pushed && !wiz_return_wait(now) ) {
 		wiz.away = 1;
 		wiz.settle_pending = 0;
 	} else if( wiz.away && centred ) {
 		wiz.returns++;
 		wiz.away = 0;
 		wiz.settle_pending = 1;
+		wiz.return_time = now;
 	}
 	if( wiz.settle_pending && centred && !moving && now - wiz.stable_since >= 300 ) {
 		for( int i=0; i < n; i++ ) {
@@ -1654,6 +1668,7 @@ static void wiz_paint(HDC dc)
 
 	int testing = step > WS_INTRO && step < WS_RESULTS;
 	const char *title = wiz_steps[step].title;
+	char title_buf[64];
 	char text[700];
 	if( WS_A == step || WS_B == step ) {
 		int owner = wiz_chan_owner(WS_A == step ? 0 : 1);
@@ -1661,6 +1676,21 @@ static void wiz_paint(HDC dc)
 		title = hori_axis_label(WS_A == step ? AX_A : AX_B);
 		snprintf(text, sizeof(text), "Press %s all the way down and release it, 3 times.\n\n"
 				"This measures its resting level and how far it goes when fully pressed.", bn);
+	} else if( WS_HAT == step || WS_RUDDER == step ) {
+		// Two parts, shown one at a time.
+		int hat = WS_HAT == step;
+		snprintf(title_buf, sizeof(title_buf), "%s: %s", hat ? "Hat" : "Rudder",
+				wiz.range_done ? "spring-back" : "full range");
+		title = title_buf;
+		if( !wiz.range_done )
+			snprintf(text, sizeof(text), "Part 1 of 2.\n\n%s", hat
+					? "Move the hat slowly all the way in every direction. Circling it a couple of times works well."
+					: "Move the rudder control all the way left and all the way right.");
+		else
+			snprintf(text, sizeof(text), "Part 2 of 2.\n\n%s\n\n"
+					"Wait for it to stop before the next one; it counts once it's back in the middle.", hat
+					? "Flick the hat to the side and let go so it springs back by itself. Do this 3 times."
+					: "Push the rudder to one side and let go so it springs back by itself. Do this 3 times.");
 	} else {
 		// "&&" in the step text is for the button label; show a single "&".
 		const char *src = wiz_steps[step].text;
@@ -1720,14 +1750,19 @@ static void wiz_paint(HDC dc)
 				wiz_covered(AX_X, 90) ? "done" : "keep going", wiz_covered(AX_Y, 90) ? "done" : "keep going");
 		break;
 	case WS_STICK_RET:
-		snprintf(buf, sizeof(buf), "Spring-backs seen: %d of 5", wiz.returns);
+		snprintf(buf, sizeof(buf), "Spring-backs seen: %d of 5%s", wiz.returns,
+				wiz.returns < 5 && wiz_return_wait(now) ? "   (wait for it to stop)" : "");
 		break;
 	case WS_HAT:
 	case WS_RUDDER:
-		if( !wiz.range_done )
-			snprintf(buf, sizeof(buf), "1. Full range: keep going   2. Spring-backs: next");
+		if( wiz.range_done )
+			snprintf(buf, sizeof(buf), "Spring-backs: %d of 3%s", wiz.returns,
+					wiz.returns < 3 && wiz_return_wait(now) ? "   (wait for it to stop)" : "");
+		else if( WS_HAT == step )
+			snprintf(buf, sizeof(buf), "Left/right: %s   Up/down: %s",
+					wiz_covered(AX_HATX, 70) ? "done" : "keep going", wiz_covered(AX_HATY, 70) ? "done" : "keep going");
 		else
-			snprintf(buf, sizeof(buf), "1. Full range: done   2. Spring-backs: %d of 3", wiz.returns);
+			snprintf(buf, sizeof(buf), "Left/right: %s", wiz_covered(AX_RUD, 70) ? "done" : "keep going");
 		break;
 	case WS_THROTTLE:
 		snprintf(buf, sizeof(buf), "End-to-end moves: %d of 3", wiz.thr_changes);
