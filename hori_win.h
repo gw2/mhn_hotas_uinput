@@ -144,6 +144,7 @@ extern const char *const hori_axis_name[AX_COUNT];
 extern const int hori_axis_centered[AX_COUNT];
 
 extern int opt_mode;
+extern int opt_dpad_buttons;    /* D-pads as buttons 13-23 instead of POV hats (for PCSX2 and other SDL games) */
 extern int opt_threshold;
 extern int opt_debug;
 extern UINT opt_vjoy_id;
@@ -189,6 +190,7 @@ void hori_ini_path(char *out, size_t size);
 void hori_cal_load(void);
 void hori_cal_save(void);
 void hori_map_save(void);
+void hori_options_save(void);
 int hori_vjoy_axes_ok(void);
 int hori_vjoy_buttons_needed(void);
 void hori_vjoy_release(void);

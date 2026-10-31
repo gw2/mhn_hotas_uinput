@@ -186,6 +186,15 @@ Buttons: 1 Trigger   2 Button C   3 Launch   4 Button A   5 Button B
           D-PAD 2 is buttons 20-23. With fewer than 3, D-PAD 3 is buttons
           14 up, 15 right, 13 left.)
 
+D-pads in PCSX2 (and other games that read controllers through SDL): these
+don't see vJoy's POV hats, so the D-pads do nothing there. In the test
+window set "D-pads in games" to "Buttons (PCSX2 and SDL games)" (or start
+hori.exe with -D buttons), then bind them again in the game:
+         D-PAD 1: 16 up, 17 right, 18 down, 19 left
+         D-PAD 2: 20 up, 21 right, 22 down, 23 left
+         D-PAD 3: 14 up, 15 right, 13 left
+The setting is saved, and hori.exe uses it too.
+
 Options:
   -m buttons   (default) the M1/M2/M3 switch holds button 10, 11 or 12
   -m shift     every button number goes up by 32 in M2 and 64 in M3,
@@ -194,6 +203,8 @@ Options:
   -m off       ignore the switch
   -t N         A/B press threshold, 0-254 (default 20); lower = lighter press
   -n ID        use vJoy device ID instead of 1
+  -D buttons   D-pads as buttons 13-23 instead of POV hats (for PCSX2);
+               -D hats goes back. Without -D, the test window's setting is used.
   -d           print raw data from the stick (for troubleshooting)
 
 

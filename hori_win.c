@@ -134,6 +134,8 @@ int opt_threshold = 20;
 int opt_debug = 0;
 UINT opt_vjoy_id = 1;
 static int opt_threshold_set = 0;
+int opt_dpad_buttons = 0;
+static int opt_dpad_set = 0;
 
 int vj_ok = 0;
 int vj_state = VJS_NOT_INSTALLED;
@@ -260,6 +262,10 @@ void hori_cal_load(void)
 	if( t >= 0 && t <= 254 && !opt_threshold_set )
 		opt_threshold = t;
 
+	GetPrivateProfileStringA("Options", "DPads", "", buf, sizeof(buf), path);
+	if( !opt_dpad_set && buf[0] )
+		opt_dpad_buttons = 0 == _stricmp(buf, "buttons");
+
 	memcpy(hori_map, hori_map_default, sizeof(hori_map));
 	for( int i=0; i < HB_COUNT; i++ ) {
 		struct hori_btn_map m;
@@ -281,6 +287,13 @@ void hori_map_save(void)
 	}
 	// D-PAD 3 turned out to have no down position; drop the key older builds wrote.
 	WritePrivateProfileStringA("Buttons", "Pad3Down", NULL, path);
+}
+
+void hori_options_save(void)
+{
+	char path[MAX_PATH];
+	hori_ini_path(path, sizeof(path));
+	WritePrivateProfileStringA("Options", "DPads", opt_dpad_buttons ? "buttons" : "hats", path);
 }
 
 uint64_t hori_button_word(const struct hori_instance *inst)
@@ -470,9 +483,11 @@ static int hori_vjoy_init(void)
 	hori_log("vJoy device %u: %d buttons, %d continuous + %d 4-way POVs.\n",
 			opt_vjoy_id, vj_buttons, vj_cont_povs, vj_disc_povs);
 
-	if( vj_cont_povs + vj_disc_povs < 2 )
+	if( opt_dpad_buttons )
+		hori_log("D-pads are buttons: D-PAD 3 13/14/15 (left, up, right), D-PAD 1 16-19 and D-PAD 2 20-23 (up, right, down, left).\n");
+	else if( vj_cont_povs + vj_disc_povs < 2 )
 		hori_log("Note: fewer than 2 POV hats on vJoy device %u, so D-PAD 1/2 are buttons 16-23.\n", opt_vjoy_id);
-	if( vj_cont_povs + vj_disc_povs < 3 )
+	if( !opt_dpad_buttons && vj_cont_povs + vj_disc_povs < 3 )
 		hori_log("Note: D-PAD 3 is buttons 13/14/15; set 3 POV hats in \"Configure vJoy\" to make it POV 3.\n");
 
 	return 0;
@@ -831,9 +846,25 @@ static void hori_report(struct hori_instance *inst)
 		}
 	}
 
-	// D-PAD 1 and 2 go on POV 1 and 2, D-PAD 3 on POV 3, when vJoy has that many.
-	int povs = vj_cont_povs + vj_disc_povs;
+	// D-PAD 1 and 2 go on POV 1 and 2, D-PAD 3 on POV 3, when vJoy has that many,
+	// unless they're set to be buttons (PCSX2 and other SDL games miss vJoy's POVs).
+	int povs = opt_dpad_buttons ? 0 : vj_cont_povs + vj_disc_povs;
 	int on_pov[HB_COUNT] = { 0 };
+
+	static int dpad_was = -1;
+	if( dpad_was != opt_dpad_buttons ) {
+		// Switched: centre the hats and let go of the D-pad buttons, then resend
+		// whatever is held on the new outputs.
+		if( dpad_was >= 0 ) {
+			for( int n=0; n < vj_cont_povs + vj_disc_povs && n < 3; n++ )
+				hori_set_pov(inst, n, 0, 0, 0, 0);
+			for( i=HB_DPAD3_TOP; i <= HB_DPAD2_LEFT; i++ ) {
+				hori_set_btn(hori_btn_num[i] + inst->layer * HORI_LAYER_STRIDE, 0);
+				inst->btn[i] = 0;
+			}
+		}
+		dpad_was = opt_dpad_buttons;
+	}
 	if( povs >= 2 ) {
 		static const int pov_pad[2] = { HB_DPAD1_TOP, HB_DPAD2_TOP };
 		for( int p=0; p < 2; p++ ) {
@@ -1066,6 +1097,8 @@ static void hori_usage(const char *argv0)
 		"  -t N      A/B press threshold, 0-254 on the 0-255 pressure scale\n"
 		"            (default: from the setup wizard, or 20)\n"
 		"  -n ID     vJoy device number to use (default: 1)\n"
+		"  -D WHAT   D-pads as \"hats\" (POV hats 1-3) or \"buttons\" (13-23, for PCSX2)\n"
+		"            (default: from the test window's setting, or hats)\n"
 		"  -g        Open the test window (shows every control live)\n"
 		"  -T        Start the test window hidden in the tray (used for Start with Windows)\n"
 		"  -d        Debug: print raw reports as they change\n"
@@ -1087,7 +1120,7 @@ int main(int argc, char **argv)
 
 	InitializeCriticalSection(&hori_lock);
 
-	while( -1 != (c = getopt(argc, argv, "m:t:n:gTdPh")) )
+	while( -1 != (c = getopt(argc, argv, "m:t:n:D:gTdPh")) )
 	{
 		switch( c ) {
 		case 'm':
@@ -1105,6 +1138,12 @@ int main(int argc, char **argv)
 		case 'n':
 			opt_vjoy_id = (UINT)atoi(optarg);
 			if( opt_vjoy_id < 1 || opt_vjoy_id > 16 ) { hori_usage(argv[0]); return EXIT_FAILURE; }
+			break;
+		case 'D':
+			if( 0 == strcmp(optarg, "hats") ) opt_dpad_buttons = 0;
+			else if( 0 == strcmp(optarg, "buttons") ) opt_dpad_buttons = 1;
+			else { hori_usage(argv[0]); return EXIT_FAILURE; }
+			opt_dpad_set = 1;
 			break;
 		case 'g': opt_gui = 1; break;
 		case 'T': opt_gui = 1; opt_tray = 1; break;

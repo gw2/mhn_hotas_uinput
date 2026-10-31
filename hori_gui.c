@@ -40,7 +40,7 @@
 
 enum {
 	IDC_LEVEL = 101, IDC_RAWLINES, IDC_RAWSPIN, IDC_LOGMODE, IDC_SAVELOG, IDC_OPENLOGS,
-	IDC_WIZARD, IDC_RESETCAL, IDC_SETUP, IDC_ABOUT,
+	IDC_WIZARD, IDC_RESETCAL, IDC_SETUP, IDC_ABOUT, IDC_DPADS,
 	IDC_WIZ_SKIP = 201, IDC_WIZ_NEXT, IDC_WIZ_CANCEL, IDC_WIZ_ALL, IDC_WIZ_ANALOG, IDC_WIZ_BUTTONS,
 	IDC_WIZ_BACK, IDC_WIZ_SKIPBTN,
 };
@@ -2156,6 +2156,7 @@ static void gui_paint(HDC dc)
 	y = GUI_CTRL_Y;
 	gui_text(dc, 16, y + 4, GUI_TEXT, "Log level");
 	gui_text(dc, 206, y + 4, log_level ? GUI_TEXT : GUI_DIM, "Raw lines kept");
+	gui_text(dc, 868, y + 4, GUI_TEXT, "D-pads in games");
 
 	/* right of the wizard / reset buttons: log file and dead zones in use */
 	y += 36;
@@ -2219,6 +2220,11 @@ static void gui_create_controls(HWND w)
 	gui_control(w, 0, "BUTTON", "Save log now", BS_PUSHBUTTON | WS_TABSTOP, 608, y - 1, 110, 28, IDC_SAVELOG);
 	gui_control(w, 0, "BUTTON", "Open log folder", BS_PUSHBUTTON | WS_TABSTOP, 724, y - 1, 124, 28, IDC_OPENLOGS);
 
+	HWND dpads = gui_control(w, 0, "COMBOBOX", "", CBS_DROPDOWNLIST | WS_TABSTOP | WS_VSCROLL, 1000, y, 266, 200, IDC_DPADS);
+	SendMessageA(dpads, CB_ADDSTRING, 0, (LPARAM)"POV hats (most PC games)");
+	SendMessageA(dpads, CB_ADDSTRING, 0, (LPARAM)"Buttons (PCSX2 and SDL games)");
+	SendMessageA(dpads, CB_SETCURSEL, opt_dpad_buttons, 0);
+
 	y += 36;
 	gui_control(w, 0, "BUTTON", "Setup wizard...", BS_PUSHBUTTON | WS_TABSTOP, 16, y, 150, 30, IDC_WIZARD);
 	gui_control(w, 0, "BUTTON", "Reset dead zones", BS_PUSHBUTTON | WS_TABSTOP, 176, y, 150, 30, IDC_RESETCAL);
@@ -2260,6 +2266,18 @@ static void gui_command(HWND w, int id, int code)
 			log_new_each_run = (int)SendMessageA(GetDlgItem(w, IDC_LOGMODE), CB_GETCURSEL, 0, 0) ? 1 : 0;
 			gui_log_update_path();
 			gui_settings_save();
+		}
+		break;
+
+	case IDC_DPADS:
+		if( CBN_SELCHANGE == code ) {
+			int b = (int)SendMessageA(GetDlgItem(w, IDC_DPADS), CB_GETCURSEL, 0, 0) ? 1 : 0;
+			EnterCriticalSection(&hori_lock);
+			opt_dpad_buttons = b;
+			LeaveCriticalSection(&hori_lock);
+			hori_options_save();
+			hori_log(b ? "D-pads are now buttons: D-PAD 3 13/14/15, D-PAD 1 16-19, D-PAD 2 20-23. Rebind them in the game.\n"
+					: "D-pads are now POV hats 1-3. Rebind them in the game.\n");
 		}
 		break;
 
