@@ -464,11 +464,10 @@ static void gui_settings_save(void)
 
 static void gui_log_update_path(void)
 {
-	if( !GetModuleFileNameA(NULL, log_dir, sizeof(log_dir)) )
-		strcpy(log_dir, ".\\x");
-	char *slash = strrchr(log_dir, '\\');
-	if( slash )
-		strcpy(slash + 1, "logs");
+	// "logs" next to the exe when portable, else %LOCALAPPDATA%\Flightstick2\logs
+	char base[MAX_PATH];
+	hori_data_dir(base, sizeof(base), "LOCALAPPDATA");
+	snprintf(log_dir, sizeof(log_dir), "%s\\logs", base);
 	CreateDirectoryA(log_dir, NULL);
 
 	if( log_new_each_run )

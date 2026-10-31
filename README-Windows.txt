@@ -2,23 +2,62 @@ HORI/Namco Flightstick 2 (Ace Combat 5) on Windows 10/11
 =========================================================
 
 hori.exe reads the stick and feeds a vJoy virtual joystick that games see
-as a normal controller. One-time setup takes about 10 minutes.
+as a normal controller.
 
 
-Quick setup: the Setup check
-----------------------------
-Plug in the stick and run hori-test.exe. If anything is missing it opens
-the Setup check, which checks three things and offers to fix each one:
+Easiest: the installer
+----------------------
+Plug in the stick and run Flightstick2-Setup-<version>.exe. With one admin
+prompt it:
+  - installs the app to Program Files, with Start-menu shortcuts and an
+    entry in Settings > Apps for uninstalling,
+  - installs vJoy 2.2.2.0 (its official installer is included) if needed,
+  - sets vJoy device 1 to 8 axes, 32 buttons and 3 POV hats (this replaces
+    device 1's current setup; untick it on the components page to skip),
+  - gives the stick Windows' built-in WinUSB driver with hori-driver.exe,
+  - and, if you tick it, starts the driver when you sign in.
+Then open "Flightstick 2 test and setup" from the Start menu to check it.
+Settings and logs go in %APPDATA%\Flightstick2 and %LOCALAPPDATA%\Flightstick2.
+
+Windows may warn that the installer is from an unknown publisher, because
+it isn't code-signed: click "More info", then "Run anyway".
+
+Uninstalling (Settings > Apps > Flightstick 2 driver) removes the app and
+offers to remove the stick's WinUSB driver. vJoy stays, with its own
+uninstaller.
+
+
+About the stick's WinUSB driver (hori-driver.exe)
+-------------------------------------------------
+Windows has no driver for this stick. hori-driver.exe adds a small driver
+package that points it at the WinUSB driver built into Windows; no driver
+code of our own is installed. Windows wants driver packages signed, so,
+like Zadig, it signs this one with a certificate made just for it, adds that
+certificate to Windows' trusted certificates, and deletes the certificate's
+private key so it can't sign anything else. The signing code is libwdi's,
+the library Zadig is built on.
+  hori-driver.exe install     (as admin) install it
+  hori-driver.exe uninstall   (as admin) remove it and its certificate
+
+
+Zip download: the Setup check
+-----------------------------
+If you use the zip instead of the installer, unzip it anywhere, plug in the
+stick and run hori-test.exe. If anything is missing it opens the Setup
+check, which checks three things and offers to fix each one:
   1. vJoy installed      -> downloads vJoy 2.2.2.0 and runs its installer
   2. vJoy device set up  -> runs vJoyConfig: 8 axes, 32 buttons, 3 POV hats
                             (this replaces vJoy device 1's current setup)
-  3. Stick has WinUSB    -> downloads Zadig 2.9 and opens it with WinUSB
-                            selected; pick USB ID 06D3 0F10, click Install Driver
+  3. Stick has WinUSB    -> runs hori-driver.exe install
+                            (or, if it's missing, downloads Zadig 2.9 and
+                            opens it with WinUSB selected)
 Nothing is downloaded or installed until you click and say yes, and Windows
 asks for admin permission for each install. Downloads come from the official
-GitHub releases (vJoy is MIT licensed, Zadig GPLv3) and are checked against
-a known SHA-256 fingerprint before they run; files go in
-%LOCALAPPDATA%\hori-setup. You can open it any time with "Setup check...".
+GitHub releases and are checked against a known SHA-256 fingerprint before
+they run; files go in %LOCALAPPDATA%\hori-setup. You can open it any time
+with "Setup check...".
+A copy with a hori.ini next to the exe keeps its settings and logs in its
+own folder (portable); otherwise they go in your user folders as above.
 
 The manual steps below do the same by hand.
 
@@ -167,9 +206,12 @@ Credits and licenses
 --------------------
 This is a fork of mhn_hotas_uinput by Daniel O'Neill (MIT, see LICENSE).
 It builds on hfsd (the original Windows driver, by tamanegi.org), libusb
-1.0.27 (built into the exes; LGPL 2.1, see LICENSE-libusb.txt), and uses
-vJoy (MIT) and Zadig (GPLv3), which the Setup check downloads but which
-aren't included. hori-test.exe's "About..." button lists them with links;
-THIRD-PARTY-NOTICES.txt has the details.
+1.0.27 (built into the exes; LGPL 2.1, see LICENSE-libusb.txt), libwdi's
+pki.c (built into hori-driver.exe; LGPL 3), vJoy (MIT; its installer is
+included in the installer) and NSIS (builds the installer). hori-test.exe's
+"About..." button lists them with links; THIRD-PARTY-NOTICES.txt has the
+details, and the installer puts their license texts in its "licenses" folder.
 
-Building: ./build-windows.sh <libusb-1.0.27 Windows release folder> (needs mingw-w64)
+Building:
+  ./build-windows.sh <libusb-1.0.27 Windows release folder>    (needs mingw-w64)
+  ./build-installer.sh <vJoySetup_v2.2.2.0_Win10_Win11.exe>    (needs NSIS)

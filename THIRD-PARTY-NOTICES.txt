@@ -47,34 +47,61 @@ Used for: Talking to the stick over USB. The Windows exes are statically
 Donate:   No donation link offered.
 
 
-vJoy: the virtual joystick games see (DOWNLOADED, not included)
----------------------------------------------------------------
+vJoy: the virtual joystick games see (INCLUDED in the installer)
+----------------------------------------------------------------
 Authors:  Shaul Eizikovich (original author); maintained by
           Brunner Elektronik AG
 Links:    https://github.com/BrunnerInnovation/vJoy
           https://sourceforge.net/projects/vjoystick/
-License:  MIT.
+License:  MIT (Copyright (c) 2017 Shaul Eizikovich). The full text is in
+          licenses\vJoy-LICENSE.txt (third_party/vjoy/LICENSE.txt in the
+          source).
 Used for: hori.exe feeds the stick into a vJoy device through
-          vJoyInterface.dll, loaded from vJoy's own install folder. The
-          Setup check can download the official vJoy 2.2.2.0 installer
-          from the GitHub release above and run it, and runs vJoy's own
-          vJoyConfig tool. vJoy is not redistributed with this project.
+          vJoyInterface.dll, loaded from vJoy's own install folder.
+          The installer (Flightstick2-Setup-*.exe) includes the official,
+          unmodified vJoy 2.2.2.0 installer from the GitHub release above
+          and runs it if vJoy isn't installed; the installer and the
+          Setup check run vJoy's own vJoyConfig tool to set up the device.
+          The zip download doesn't include vJoy: its Setup check downloads
+          it from the release above.
 Donate:   No donation link offered.
 
 
-Zadig / libwdi: installs the stick's WinUSB driver (DOWNLOADED, not included)
------------------------------------------------------------------------------
+libwdi: the WinUSB driver install (pki.c INCLUDED in hori-driver.exe)
+---------------------------------------------------------------------
 Author:   Pete Batard (Akeo Consulting)
-Links:    https://zadig.akeo.ie
-          https://github.com/pbatard/libwdi
-License:  Zadig: GNU GPL version 3 or later. libwdi: GNU LGPL version 3 or
-          later.
-Used for: The Setup check can download the official Zadig 2.9 from the
-          libwdi GitHub release and open it with a zadig.ini that selects
-          WinUSB. Zadig is not redistributed with this project.
+Links:    https://github.com/pbatard/libwdi  (tag v1.5.1)
+          https://zadig.akeo.ie
+License:  GNU LGPL version 3 or later. The full texts are in
+          licenses\libwdi-COPYING-LGPL.txt and licenses\libwdi-COPYING.txt
+          (third_party/libwdi in the source).
+Used for: hori-driver.exe gives the stick Windows' built-in WinUSB driver.
+          It's built with libwdi's unmodified pki.c, which creates the
+          driver package's catalog and signs it with a certificate made
+          for that one package (whose private key it then deletes), the
+          same way Zadig does. The source of hori-driver.exe and the
+          vendored libwdi files are public, so it can be rebuilt with a
+          modified libwdi (see third_party/libwdi/README.txt).
+          If hori-driver.exe is missing, the Setup check can instead
+          download the official Zadig 2.9 (GNU GPL v3 or later) from the
+          libwdi GitHub release and open it; Zadig isn't redistributed.
 Donate:   No donation link offered. Pete Batard's Rufus site
           (https://rufus.ie) points people who want to give something to
           the Free Software Foundation instead: https://www.fsf.org/
+
+
+NSIS: builds the installer (its runtime is INCLUDED in the installer)
+---------------------------------------------------------------------
+Links:    https://nsis.sourceforge.io
+License:  zlib/libpng license (https://nsis.sourceforge.io/License), except
+          its LZMA compression module, which is under the Common Public
+          License 1.0 with an exception for code linked to it.
+Used for: Flightstick2-Setup-*.exe is built with NSIS 3.09 and contains
+          its installer runtime, including the unmodified LZMA
+          decompression code. That code is provided by its authors
+          without warranty, and its source is available with NSIS from
+          https://nsis.sourceforge.io/Download.
+Donate:   No donation link offered.
 
 
 Controller drawing (hori-diagram.bmp)

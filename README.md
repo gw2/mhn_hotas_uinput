@@ -18,8 +18,9 @@ This fork ([gw2/mhn_hotas_uinput](https://github.com/gw2/mhn_hotas_uinput)) adds
 * [mhn_hotas_uinput](https://github.com/danieloneill/mhn_hotas_uinput) by Daniel O'Neill: the original driver (MIT, see `LICENSE`).
 * [hfsd](https://www.tamanegi.org/prog/hfsd/) by tamanegi.org: the USB protocol (free, no warranty, no restrictions).
 * [libusb](https://libusb.info) 1.0.27: built into the Windows exes (LGPL 2.1 or later, see `LICENSE-libusb.txt`).
-* [vJoy](https://github.com/BrunnerInnovation/vJoy) by Shaul Eizikovich, maintained by Brunner Elektronik AG (MIT): downloaded by the Windows setup check, not included.
-* [Zadig](https://zadig.akeo.ie) / [libwdi](https://github.com/pbatard/libwdi) by Pete Batard (GPLv3 / LGPLv3): downloaded by the Windows setup check, not included.
+* [vJoy](https://github.com/BrunnerInnovation/vJoy) by Shaul Eizikovich, maintained by Brunner Elektronik AG (MIT): its official installer is included in the Windows installer.
+* [libwdi](https://github.com/pbatard/libwdi) by Pete Batard (LGPLv3): its `pki.c` is built into `hori-driver.exe`, which installs the stick's WinUSB driver the way [Zadig](https://zadig.akeo.ie) does (see `third_party/libwdi`).
+* [NSIS](https://nsis.sourceforge.io) (zlib; LZMA module CPL 1.0): builds the Windows installer.
 
 Details, including what each is used for: `THIRD-PARTY-NOTICES.txt`. None of these projects offers a donation link.
 

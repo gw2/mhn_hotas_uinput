@@ -10,7 +10,7 @@
 
 #include <libusb.h>
 
-#define HORI_VERSION "0.2.0"
+#define HORI_VERSION "0.3.0"
 
 struct hori_input_ir {
 	uint8_t	pos_x;
@@ -183,6 +183,8 @@ void hori_log(const char *fmt, ...);
 const char *hori_vr_variant_name(int variant);
 int hori_pressure(uint8_t raw);
 int hori_cal_apply(const struct hori_cal *c, int v);
+int hori_portable(void);
+void hori_data_dir(char *out, size_t size, const char *env);
 void hori_ini_path(char *out, size_t size);
 void hori_cal_load(void);
 void hori_cal_save(void);

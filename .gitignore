@@ -7,5 +7,6 @@ hori
 hori.ini
 logs/
 
-# Ready-to-run Windows bundle (published as release downloads instead)
+# Ready-to-run Windows bundle and installer inputs (published as release downloads instead)
 windows/
+installer/build/

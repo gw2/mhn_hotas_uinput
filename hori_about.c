@@ -11,7 +11,7 @@
 #include <shellapi.h>
 
 #define ABOUT_W 780
-#define ABOUT_H 780
+#define ABOUT_H 840
 
 enum { IDC_ABOUT_NOTICES = 401, IDC_ABOUT_LGPL, IDC_ABOUT_CLOSE, IDC_ABOUT_LINK = 420 };
 
@@ -35,17 +35,20 @@ static const struct { const wchar_t *title; const wchar_t *body; } about_entries
 	  L"<a href=\"https://libusb.info\">libusb.info</a>  \x00b7  "
 	  L"<a href=\"https://github.com/libusb/libusb/tree/v1.0.27\">source of v1.0.27</a>.  No donation link offered." },
 	{ L"vJoy, by Shaul Eizikovich, maintained by Brunner Elektronik AG",
-	  L"The virtual joystick games see. MIT license. The Setup check downloads it from its official release; "
-	  L"it isn't included here. "
+	  L"The virtual joystick games see. MIT license. The installer includes the official vJoy 2.2.2.0 setup; "
+	  L"the zip's Setup check downloads it. "
 	  L"<a href=\"https://github.com/BrunnerInnovation/vJoy\">GitHub</a>  \x00b7  "
 	  L"<a href=\"https://sourceforge.net/projects/vjoystick/\">SourceForge</a>.  No donation link offered." },
-	{ L"Zadig and libwdi, by Pete Batard",
-	  L"Installs the stick's WinUSB driver. Zadig is GPLv3, libwdi LGPLv3. The Setup check downloads Zadig "
-	  L"from its official release; it isn't included here. "
-	  L"<a href=\"https://zadig.akeo.ie\">zadig.akeo.ie</a>  \x00b7  "
-	  L"<a href=\"https://github.com/pbatard/libwdi\">libwdi on GitHub</a>.  "
+	{ L"libwdi and Zadig, by Pete Batard",
+	  L"hori-driver.exe installs the stick's WinUSB driver with libwdi's pki.c built in (LGPLv3, unmodified, "
+	  L"source in third_party/libwdi), signing the driver package the way Zadig does. "
+	  L"<a href=\"https://github.com/pbatard/libwdi\">libwdi on GitHub</a>  \x00b7  "
+	  L"<a href=\"https://zadig.akeo.ie\">zadig.akeo.ie</a>.  "
 	  L"No donation link: his Rufus site points people who want to give something to the "
 	  L"<a href=\"https://www.fsf.org/\">Free Software Foundation</a> instead." },
+	{ L"NSIS",
+	  L"Builds the installer (zlib license; its LZMA decompressor is CPL 1.0, source at "
+	  L"<a href=\"https://nsis.sourceforge.io/Download\">nsis.sourceforge.io</a>).  No donation link offered." },
 	{ L"Controller drawing and trademarks",
 	  L"The controller drawing was supplied by gw2, based on the labels printed on the controller. "
 	  L"HORI, Namco and Ace Combat are trademarks of their owners; this project isn't affiliated with or "

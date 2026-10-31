@@ -75,7 +75,24 @@ static const char zadig_ini[] =
 
 #define SETUP_POVS 3
 
-enum { ACT_NONE, ACT_INSTALL_VJOY, ACT_ENABLE_VJOY, ACT_CONFIG_VJOY, ACT_ZADIG };
+enum { ACT_NONE, ACT_INSTALL_VJOY, ACT_ENABLE_VJOY, ACT_CONFIG_VJOY, ACT_WINUSB, ACT_ZADIG };
+
+/* hori-driver.exe next to this program: one-click WinUSB install (Zadig is the fallback). */
+static int driver_tool(char *out, size_t size)
+{
+	char path[MAX_PATH];
+	if( !GetModuleFileNameA(NULL, path, sizeof(path)) )
+		return 0;
+	char *slash = strrchr(path, '\\');
+	if( !slash )
+		return 0;
+	snprintf(slash + 1, sizeof(path) - (slash + 1 - path), "hori-driver.exe");
+	if( GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES )
+		return 0;
+	if( out )
+		snprintf(out, size, "%s", path);
+	return 1;
+}
 enum { ST_OK, ST_WARN, ST_BAD, ST_DIM };
 
 struct setup_row {
@@ -199,12 +216,19 @@ static void setup_rows(struct setup_row rows[3])
 		break;
 	case USBS_NO_WINUSB:
 		rows[2].state = ST_BAD;
-		snprintf(rows[2].detail, sizeof(rows[2].detail),
-				"The stick is plugged in but has no WinUSB driver. Downloads %s (%s), checks it, "
-				"and opens it with WinUSB selected: pick USB ID 06D3 0F10 and click Install Driver.",
-				dl_zadig.what, dl_zadig.size);
 		rows[2].button = "Install the stick's driver";
-		rows[2].action = ACT_ZADIG;
+		if( driver_tool(NULL, 0) ) {
+			snprintf(rows[2].detail, sizeof(rows[2].detail),
+					"The stick is plugged in but has no WinUSB driver. One click installs it with "
+					"hori-driver.exe; Windows asks for admin permission.");
+			rows[2].action = ACT_WINUSB;
+		} else {
+			snprintf(rows[2].detail, sizeof(rows[2].detail),
+					"The stick is plugged in but has no WinUSB driver. Downloads %s (%s), checks it, "
+					"and opens it with WinUSB selected: pick USB ID 06D3 0F10 and click Install Driver.",
+					dl_zadig.what, dl_zadig.size);
+			rows[2].action = ACT_ZADIG;
+		}
 		break;
 	default:
 		rows[2].state = ST_DIM;
@@ -372,6 +396,37 @@ static void act_vjoyconfig(const char *params, const char *what)
 		setup_say(1, "%s: vJoyConfig finished (code %ld) but vJoy isn't ready yet. Click Check again in a moment.", what, code);
 }
 
+/* Wait briefly for the stick to come back with a driver after an install. */
+static void wait_for_winusb(void)
+{
+	for( int i=0; i < 10; i++ ) {
+		setup_usb = hori_usb_state();
+		if( USBS_NO_WINUSB != setup_usb )
+			break;
+		Sleep(500);
+	}
+}
+
+static void act_winusb(void)
+{
+	char exe[MAX_PATH];
+	if( !driver_tool(exe, sizeof(exe)) ) {
+		setup_say(1, "hori-driver.exe isn't next to this program.");
+		return;
+	}
+	setup_say(0, "Installing the stick's WinUSB driver: approve the Windows prompt...");
+	long code = setup_run_admin(exe, "install", NULL, SW_HIDE);
+	if( code < 0 )
+		return;
+	wait_for_winusb();
+	if( 0 == code && USBS_NO_WINUSB != setup_usb )
+		setup_say(0, "The stick's WinUSB driver is installed.");
+	else if( 0 == code )
+		setup_say(1, "hori-driver.exe finished, but the stick still has no WinUSB driver. Unplug it and plug it back in.");
+	else
+		setup_say(1, "hori-driver.exe failed (code %ld). Run \"hori-driver.exe install\" from a terminal to see why.", code);
+}
+
 static void act_zadig(void)
 {
 	char dir[MAX_PATH], path[MAX_PATH], ini[MAX_PATH];
@@ -390,12 +445,7 @@ static void act_zadig(void)
 	if( code < 0 )
 		return;
 
-	for( int i=0; i < 6; i++ ) {
-		setup_usb = hori_usb_state();
-		if( USBS_NO_WINUSB != setup_usb )
-			break;
-		Sleep(500);
-	}
+	wait_for_winusb();
 	if( USBS_NO_WINUSB == setup_usb )
 		setup_say(1, "Zadig closed, but the stick still has no WinUSB driver. Try again, and check the USB ID was 06D3 0F10.");
 	else
@@ -419,6 +469,9 @@ static DWORD WINAPI setup_thread(LPVOID param)
 				opt_vjoy_id, hori_vjoy_buttons_needed() > 32 ? 128 : 32, SETUP_POVS);
 		act_vjoyconfig(params, "Setting up vJoy device");
 		break;
+	case ACT_WINUSB:
+		act_winusb();
+		break;
 	case ACT_ZADIG:
 		act_zadig();
 		break;
@@ -434,7 +487,7 @@ static DWORD WINAPI setup_thread(LPVOID param)
 /* Explain what's about to happen and ask first. */
 static int setup_confirm(HWND w, int action)
 {
-	char msg[900];
+	char msg[1100];
 	int buttons = hori_vjoy_buttons_needed() > 32 ? 128 : 32;
 
 	switch( action ) {
@@ -454,6 +507,15 @@ static int setup_confirm(HWND w, int action)
 				"This replaces device %u's current setup, so any other program using that device "
 				"will see the change. Windows will ask for admin permission.",
 				opt_vjoy_id, buttons, SETUP_POVS, opt_vjoy_id);
+		break;
+	case ACT_WINUSB:
+		snprintf(msg, sizeof(msg),
+				"Install the WinUSB driver for the stick (USB ID 06D3 0F10)?\n\n"
+				"hori-driver.exe adds a small driver package that points the stick at the WinUSB driver "
+				"built into Windows. Like Zadig, it signs the package with a certificate made just for it, "
+				"adds that certificate to Windows' trusted certificates, and deletes the certificate's private "
+				"key so it can't sign anything else. Windows will ask for admin permission.\n\n"
+				"To undo it later: run \"hori-driver.exe uninstall\" as admin, or uninstall the app.");
 		break;
 	case ACT_ZADIG:
 		snprintf(msg, sizeof(msg),

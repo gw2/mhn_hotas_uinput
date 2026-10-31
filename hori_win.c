@@ -204,15 +204,43 @@ static BOOL WINAPI hori_ctrl_handler(DWORD type)
 
 /* ---- settings file (hori.ini, next to the exe) ---- */
 
-void hori_ini_path(char *out, size_t size)
+/* Portable: a hori.ini next to the exe is used as is (an unzipped copy).
+ * Otherwise (installed in Program Files) settings live in %APPDATA%\Flightstick2. */
+int hori_portable(void)
 {
+	char path[MAX_PATH];
+	if( !GetModuleFileNameA(NULL, path, sizeof(path)) )
+		return 1;
+	char *slash = strrchr(path, '\\');
+	if( slash )
+		snprintf(slash + 1, sizeof(path) - (slash + 1 - path), "hori.ini");
+	return GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES;
+}
+
+/* The folder settings or logs go in (created if needed): next to the exe when
+ * portable, otherwise under the given user folder ("APPDATA" or "LOCALAPPDATA"). */
+void hori_data_dir(char *out, size_t size, const char *env)
+{
+	const char *base = getenv(env);
+	if( !hori_portable() && base && base[0] ) {
+		snprintf(out, size, "%s\\Flightstick2", base);
+		CreateDirectoryA(out, NULL);
+		return;
+	}
 	if( !GetModuleFileNameA(NULL, out, (DWORD)size) ) {
-		snprintf(out, size, "hori.ini");
+		snprintf(out, size, ".");
 		return;
 	}
 	char *slash = strrchr(out, '\\');
 	if( slash )
-		snprintf(slash + 1, size - (slash + 1 - out), "hori.ini");
+		*slash = 0;
+}
+
+void hori_ini_path(char *out, size_t size)
+{
+	char dir[MAX_PATH];
+	hori_data_dir(dir, sizeof(dir), "APPDATA");
+	snprintf(out, size, "%s\\hori.ini", dir);
 }
 
 void hori_cal_load(void)
